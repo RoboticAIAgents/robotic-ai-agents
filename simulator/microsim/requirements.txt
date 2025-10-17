@@ -1,0 +1,5 @@
+# Core dependencies
+numpy>=1.20.0
+
+# ROS 2 dependencies are managed through rosdep
+# Install with: rosdep install --from-paths src --ignore-src -r -y
