@@ -258,6 +258,11 @@ class TestIntegration(unittest.TestCase):
 
     def test_drone_command_to_movement(self):
         """Test that drone velocity commands result in position changes."""
+        # First, stop the drone (clear any previous commands)
+        for _ in range(30):
+            self.test_node.publish_drone_cmd(0.0, 0.0, 0.0, 0.0)
+            self._spin_for_time(0.016)
+
         # Get initial position
         self._spin_for_time(0.5)
         initial_odom = self.test_node.get_latest_drone_odom()
@@ -271,6 +276,11 @@ class TestIntegration(unittest.TestCase):
         for _ in range(60):  # Send for ~1 second (60 Hz loop)
             self.test_node.publish_drone_cmd(1.0, 0.0, 0.0, 0.0)
             self._spin_for_time(0.016)  # ~60 Hz
+
+        # Stop the drone
+        for _ in range(30):
+            self.test_node.publish_drone_cmd(0.0, 0.0, 0.0, 0.0)
+            self._spin_for_time(0.016)
 
         # Wait a bit for motion to complete
         self._spin_for_time(0.5)
@@ -294,6 +304,11 @@ class TestIntegration(unittest.TestCase):
 
     def test_rover_command_to_movement(self):
         """Test that rover velocity commands result in position changes."""
+        # First, stop the rover (clear any previous commands)
+        for _ in range(30):
+            self.test_node.publish_rover_cmd(0.0, 0.0)
+            self._spin_for_time(0.016)
+
         # Get initial position
         self._spin_for_time(0.5)
         initial_odom = self.test_node.get_latest_rover_odom()
@@ -305,6 +320,11 @@ class TestIntegration(unittest.TestCase):
         # Send forward command (0.5 m/s)
         for _ in range(60):  # Send for ~1 second
             self.test_node.publish_rover_cmd(0.5, 0.0)
+            self._spin_for_time(0.016)
+
+        # Stop the rover
+        for _ in range(30):
+            self.test_node.publish_rover_cmd(0.0, 0.0)
             self._spin_for_time(0.016)
 
         # Wait for motion to complete
