@@ -159,8 +159,8 @@ class MicroSimNode(Node):
         self.create_service(Trigger, '~/pause', self.pause_callback)
 
         # Command velocity storage
-        self.drone_cmd = {'vx': 0.0, 'vy': 0.0, 'vz': 0.0, 'vyaw': 0.0}
-        self.rover_cmd = {'v': 0.0, 'omega': 0.0}
+        self.drone_cmd = {'vx_cmd': 0.0, 'vy_cmd': 0.0, 'vz_cmd': 0.0, 'vyaw_cmd': 0.0}
+        self.rover_cmd = {'v_cmd': 0.0, 'omega_cmd': 0.0}
 
         # Control flags
         self.paused = False
@@ -172,15 +172,15 @@ class MicroSimNode(Node):
 
     def drone_cmd_vel_callback(self, msg: Twist):
         """Handle drone velocity commands."""
-        self.drone_cmd['vx'] = msg.linear.x
-        self.drone_cmd['vy'] = msg.linear.y
-        self.drone_cmd['vz'] = msg.linear.z
-        self.drone_cmd['vyaw'] = msg.angular.z
+        self.drone_cmd['vx_cmd'] = msg.linear.x
+        self.drone_cmd['vy_cmd'] = msg.linear.y
+        self.drone_cmd['vz_cmd'] = msg.linear.z
+        self.drone_cmd['vyaw_cmd'] = msg.angular.z
 
     def rover_cmd_vel_callback(self, msg: Twist):
         """Handle rover velocity commands."""
-        self.rover_cmd['v'] = msg.linear.x
-        self.rover_cmd['omega'] = msg.angular.z
+        self.rover_cmd['v_cmd'] = msg.linear.x
+        self.rover_cmd['omega_cmd'] = msg.angular.z
 
     def drone_radio_tx_callback(self, msg: String):
         """Handle drone transmitting radio message."""
