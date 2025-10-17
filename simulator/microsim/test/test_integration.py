@@ -15,6 +15,7 @@ from threading import Event, Lock
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import SingleThreadedExecutor
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -52,6 +53,9 @@ class IntegrationTestNode(Node):
         self.received_drone_radio = Event()
         self.received_rover_radio = Event()
 
+        # QoS profile for radio (BEST_EFFORT to match simulator)
+        radio_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+
         # Subscribers
         self.create_subscription(Odometry, '/drone/odom', self._drone_odom_cb, 10)
         self.create_subscription(Odometry, '/rover/odom', self._rover_odom_cb, 10)
@@ -60,14 +64,14 @@ class IntegrationTestNode(Node):
         self.create_subscription(Range, '/rover/range', self._rover_range_cb, 10)
         self.create_subscription(Image, '/drone/camera/image_raw', self._camera_image_cb, 10)
         self.create_subscription(CameraInfo, '/drone/camera/camera_info', self._camera_info_cb, 10)
-        self.create_subscription(String, '/radio/drone_rx', self._drone_radio_cb, 10)
-        self.create_subscription(String, '/radio/rover_rx', self._rover_radio_cb, 10)
+        self.create_subscription(String, '/radio/drone_rx', self._drone_radio_cb, radio_qos)
+        self.create_subscription(String, '/radio/rover_rx', self._rover_radio_cb, radio_qos)
 
         # Publishers for commands
         self.drone_cmd_pub = self.create_publisher(Twist, '/drone/cmd_vel', 10)
         self.rover_cmd_pub = self.create_publisher(Twist, '/rover/cmd_vel', 10)
-        self.drone_radio_pub = self.create_publisher(String, '/radio/drone_tx', 10)
-        self.rover_radio_pub = self.create_publisher(String, '/radio/rover_tx', 10)
+        self.drone_radio_pub = self.create_publisher(String, '/radio/drone_tx', radio_qos)
+        self.rover_radio_pub = self.create_publisher(String, '/radio/rover_tx', radio_qos)
 
     def _drone_odom_cb(self, msg):
         with self.lock:
