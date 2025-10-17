@@ -3,20 +3,22 @@
 MicroSim Node - Main ROS 2 node for the simulator.
 
 Responsibilities:
+- Load scenario configuration from YAML
 - Initialize all subsystems (world, physics, sensors, etc.)
 - Run main simulation loop at 60 Hz
 - Publish sensor data and TF transforms
 - Handle services (reset, pause, step, seed)
 """
 
+import os
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import SingleThreadedExecutor
-from geometry_msgs.msg import Twist, PoseStamped
-from sensor_msgs.msg import NavSatFix, Range, Image, CameraInfo
+from geometry_msgs.msg import Twist, Quaternion
+from sensor_msgs.msg import NavSatFix, Range, Image, CameraInfo, NavSatStatus
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger, Empty
 from std_msgs.msg import Header
+import numpy as np
 
 from microsim.timekeeper import Timekeeper
 from microsim.world import World
@@ -25,30 +27,99 @@ from microsim.sensors import GPS, RangeSensor
 from microsim.camera import PinholeCamera
 from microsim.radio import RadioLink
 from microsim.tf_broadcaster import TFBroadcaster
+from microsim.scenario_loader import ScenarioLoader
+from microsim.utils import enu_to_wgs84, euler_to_quaternion
 
 
 class MicroSimNode(Node):
     """Main simulator node."""
 
-    def __init__(self):
+    def __init__(self, scenario_file: str = None):
         super().__init__('microsim')
 
         self.get_logger().info('MicroSim node starting...')
 
-        # Initialize subsystems
-        self.timekeeper = Timekeeper(dt=1.0/60.0)
-        self.world = World(size=(100.0, 100.0), resolution=0.5)
-        self.drone = DronePhysics(max_velocity=3.0)
-        self.rover = RoverPhysics(max_velocity=1.0)
+        # Load scenario configuration
+        if scenario_file is None:
+            # Use default scenario
+            pkg_dir = os.path.dirname(os.path.dirname(__file__))
+            scenario_file = os.path.join(pkg_dir, 'scenarios', 'default.yaml')
 
-        # Sensors
-        self.drone_gps = GPS(noise_std=0.1, rate_hz=10.0)
-        self.rover_gps = GPS(noise_std=0.1, rate_hz=10.0)
-        self.rover_range = RangeSensor(max_range=10.0, rate_hz=20.0)
-        self.drone_camera = PinholeCamera(width=128, height=128, fov_deg=90.0, rate_hz=2.0)
+        self.get_logger().info(f'Loading scenario from: {scenario_file}')
+        self.scenario = ScenarioLoader.load_from_file(scenario_file)
+
+        # Initialize world with scenario configuration
+        self.world = World(
+            size=tuple(self.scenario.world_size),
+            resolution=self.scenario.world_resolution
+        )
+
+        # Load obstacles from scenario
+        for feature in self.scenario.features:
+            semantic = ScenarioLoader.feature_type_to_semantic(feature.type)
+            self.world.set_region(
+                feature.position[0],
+                feature.position[1],
+                feature.radius,
+                feature.height,
+                semantic
+            )
+
+        self.get_logger().info(f'Loaded {len(self.scenario.features)} world features')
+
+        # Initialize timekeeper
+        self.timekeeper = Timekeeper(dt=1.0/60.0)
+
+        # Initialize robots with scenario parameters
+        self.drone = DronePhysics(
+            max_velocity=self.scenario.drone_max_velocity,
+            max_accel=self.scenario.drone_max_accel
+        )
+        self.drone.reset(
+            x=self.scenario.drone_pose.x,
+            y=self.scenario.drone_pose.y,
+            z=self.scenario.drone_pose.z
+        )
+        self.drone.state.yaw = self.scenario.drone_pose.yaw
+
+        self.rover = RoverPhysics(
+            max_velocity=self.scenario.rover_max_velocity,
+            max_omega=self.scenario.rover_max_omega
+        )
+        self.rover.reset(
+            x=self.scenario.rover_pose.x,
+            y=self.scenario.rover_pose.y,
+            theta=self.scenario.rover_pose.theta
+        )
+
+        # Initialize sensors with scenario parameters
+        self.drone_gps = GPS(
+            noise_std=self.scenario.gps_noise_std,
+            rate_hz=self.scenario.gps_rate_hz
+        )
+        self.rover_gps = GPS(
+            noise_std=self.scenario.gps_noise_std,
+            rate_hz=self.scenario.gps_rate_hz
+        )
+        self.rover_range = RangeSensor(
+            max_range=self.scenario.range_max_range,
+            noise_std=self.scenario.range_noise_std,
+            rate_hz=self.scenario.range_rate_hz
+        )
+        self.drone_camera = PinholeCamera(
+            width=self.scenario.camera_width,
+            height=self.scenario.camera_height,
+            fov_deg=self.scenario.camera_fov_deg,
+            rate_hz=self.scenario.camera_rate_hz
+        )
 
         # Radio link
-        self.radio = RadioLink(max_range=100.0)
+        self.radio = RadioLink(
+            max_range=self.scenario.radio_max_range,
+            base_latency=self.scenario.radio_base_latency,
+            jitter=self.scenario.radio_jitter,
+            packet_loss=self.scenario.radio_packet_loss
+        )
 
         # TF broadcaster
         self.tf_broadcaster = TFBroadcaster(self)
@@ -135,15 +206,35 @@ class MicroSimNode(Node):
         self.update_sensors(dt, sim_time, timestamp)
 
     def publish_odometry(self, timestamp):
-        """Publish odometry for both robots."""
+        """Publish odometry for both robots with proper quaternions."""
         # Drone odometry
         drone_odom = Odometry()
         drone_odom.header.stamp = timestamp
         drone_odom.header.frame_id = 'world'
         drone_odom.child_frame_id = 'drone/base_link'
+
+        # Position
         drone_odom.pose.pose.position.x = self.drone.state.x
         drone_odom.pose.pose.position.y = self.drone.state.y
         drone_odom.pose.pose.position.z = self.drone.state.z
+
+        # Orientation (convert Euler to quaternion)
+        qx, qy, qz, qw = euler_to_quaternion(
+            self.drone.state.roll,
+            self.drone.state.pitch,
+            self.drone.state.yaw
+        )
+        drone_odom.pose.pose.orientation.x = qx
+        drone_odom.pose.pose.orientation.y = qy
+        drone_odom.pose.pose.orientation.z = qz
+        drone_odom.pose.pose.orientation.w = qw
+
+        # Velocity (in body frame)
+        drone_odom.twist.twist.linear.x = self.drone.state.vx
+        drone_odom.twist.twist.linear.y = self.drone.state.vy
+        drone_odom.twist.twist.linear.z = self.drone.state.vz
+        drone_odom.twist.twist.angular.z = self.drone.state.vyaw
+
         self.drone_odom_pub.publish(drone_odom)
 
         # Rover odometry
@@ -151,47 +242,164 @@ class MicroSimNode(Node):
         rover_odom.header.stamp = timestamp
         rover_odom.header.frame_id = 'world'
         rover_odom.child_frame_id = 'rover/base_link'
+
+        # Position
         rover_odom.pose.pose.position.x = self.rover.state.x
         rover_odom.pose.pose.position.y = self.rover.state.y
         rover_odom.pose.pose.position.z = 0.0
+
+        # Orientation (2D rotation)
+        qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, self.rover.state.theta)
+        rover_odom.pose.pose.orientation.x = qx
+        rover_odom.pose.pose.orientation.y = qy
+        rover_odom.pose.pose.orientation.z = qz
+        rover_odom.pose.pose.orientation.w = qw
+
+        # Velocity
+        rover_odom.twist.twist.linear.x = self.rover.state.v
+        rover_odom.twist.twist.angular.z = self.rover.state.omega
+
         self.rover_odom_pub.publish(rover_odom)
 
     def update_sensors(self, dt: float, sim_time: float, timestamp):
         """Update and publish sensor data."""
+
         # Drone GPS
-        gps_reading = self.drone_gps.update(dt, self.drone.state.x,
-                                            self.drone.state.y, self.drone.state.z)
+        gps_reading = self.drone_gps.update(
+            dt,
+            self.drone.state.x,
+            self.drone.state.y,
+            self.drone.state.z
+        )
         if gps_reading is not None:
-            # TODO: Convert to proper NavSatFix with lat/lon
-            # For now, publish placeholder
-            pass
+            x, y, z = gps_reading
+            lat, lon, alt = enu_to_wgs84(x, y, z)
+
+            gps_msg = NavSatFix()
+            gps_msg.header.stamp = timestamp
+            gps_msg.header.frame_id = 'drone/gps_link'
+            gps_msg.status.status = NavSatStatus.STATUS_FIX
+            gps_msg.status.service = NavSatStatus.SERVICE_GPS
+            gps_msg.latitude = lat
+            gps_msg.longitude = lon
+            gps_msg.altitude = alt
+
+            # Covariance (diagonal with noise_std^2)
+            cov = self.scenario.gps_noise_std ** 2
+            gps_msg.position_covariance = [
+                cov, 0.0, 0.0,
+                0.0, cov, 0.0,
+                0.0, 0.0, cov
+            ]
+            gps_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
+
+            self.drone_gps_pub.publish(gps_msg)
 
         # Rover GPS
-        gps_reading = self.rover_gps.update(dt, self.rover.state.x,
-                                            self.rover.state.y, 0.0)
+        gps_reading = self.rover_gps.update(
+            dt,
+            self.rover.state.x,
+            self.rover.state.y,
+            0.0
+        )
         if gps_reading is not None:
-            # TODO: Convert to proper NavSatFix
-            pass
+            x, y, z = gps_reading
+            lat, lon, alt = enu_to_wgs84(x, y, z)
+
+            gps_msg = NavSatFix()
+            gps_msg.header.stamp = timestamp
+            gps_msg.header.frame_id = 'rover/gps_link'
+            gps_msg.status.status = NavSatStatus.STATUS_FIX
+            gps_msg.status.service = NavSatStatus.SERVICE_GPS
+            gps_msg.latitude = lat
+            gps_msg.longitude = lon
+            gps_msg.altitude = alt
+
+            cov = self.scenario.gps_noise_std ** 2
+            gps_msg.position_covariance = [
+                cov, 0.0, 0.0,
+                0.0, cov, 0.0,
+                0.0, 0.0, cov
+            ]
+            gps_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
+
+            self.rover_gps_pub.publish(gps_msg)
 
         # Rover range sensor
-        # TODO: Compute actual range by raycasting
-        true_range = 10.0  # Placeholder
+        # Compute true range by raycasting
+        true_range = self.compute_range(
+            self.rover.state.x,
+            self.rover.state.y,
+            self.rover.state.theta
+        )
+
         range_reading = self.rover_range.update(dt, true_range)
         if range_reading is not None:
-            # TODO: Publish proper Range message
+            range_msg = Range()
+            range_msg.header.stamp = timestamp
+            range_msg.header.frame_id = 'rover/range_link'
+            range_msg.radiation_type = Range.ULTRASOUND
+            range_msg.field_of_view = 0.1  # 0.1 rad cone
+            range_msg.min_range = 0.0
+            range_msg.max_range = self.scenario.range_max_range
+            range_msg.range = range_reading
+
+            self.rover_range_pub.publish(range_msg)
+
+        # Drone camera (placeholder for Sprint 3)
+        if self.drone_camera.update(dt):
+            # TODO: Render and publish image + camera_info in Sprint 3
             pass
 
-        # Drone camera
-        if self.drone_camera.update(dt):
-            # TODO: Render and publish image + camera_info
-            pass
+    def compute_range(self, x: float, y: float, theta: float) -> float:
+        """
+        Compute range to nearest obstacle in forward direction.
+
+        Args:
+            x, y: Rover position
+            theta: Rover heading
+
+        Returns:
+            Distance to nearest obstacle in meters
+        """
+        max_range = self.scenario.range_max_range
+        resolution = self.world.resolution
+
+        # Cast ray in forward direction
+        for distance in np.arange(0.0, max_range, resolution):
+            ray_x = x + distance * np.cos(theta)
+            ray_y = y + distance * np.sin(theta)
+
+            # Check if this point is inside an obstacle
+            height = self.world.get_height(ray_x, ray_y)
+
+            # If height > 0.5m, it's an obstacle (rover-height threshold)
+            if height > 0.5:
+                return distance
+
+        # No obstacle found, return max range
+        return max_range
 
     def reset_callback(self, request, response):
         """Handle reset service."""
         self.get_logger().info('Reset requested')
+
         self.timekeeper.reset()
-        self.drone.reset()
-        self.rover.reset()
+
+        # Reset robots to initial poses from scenario
+        self.drone.reset(
+            x=self.scenario.drone_pose.x,
+            y=self.scenario.drone_pose.y,
+            z=self.scenario.drone_pose.z
+        )
+        self.drone.state.yaw = self.scenario.drone_pose.yaw
+
+        self.rover.reset(
+            x=self.scenario.rover_pose.x,
+            y=self.scenario.rover_pose.y,
+            theta=self.scenario.rover_pose.theta
+        )
+
         return response
 
     def pause_callback(self, request, response):
@@ -208,6 +416,7 @@ def main(args=None):
     """Main entry point."""
     rclpy.init(args=args)
 
+    # TODO: Parse scenario file from command line args
     node = MicroSimNode()
 
     try:
