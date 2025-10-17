@@ -17,7 +17,7 @@ from geometry_msgs.msg import Twist, Quaternion
 from sensor_msgs.msg import NavSatFix, Range, Image, CameraInfo, NavSatStatus
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger, Empty
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String
 import numpy as np
 
 from microsim.timekeeper import Timekeeper
@@ -143,6 +143,17 @@ class MicroSimNode(Node):
         self.camera_image_pub = self.create_publisher(Image, '/drone/camera/image_raw', 10)
         self.camera_info_pub = self.create_publisher(CameraInfo, '/drone/camera/camera_info', 10)
 
+        # Radio communication publishers (best effort QoS for lossy channel simulation)
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        radio_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+
+        self.drone_radio_rx_pub = self.create_publisher(String, '/radio/drone_rx', radio_qos)
+        self.rover_radio_rx_pub = self.create_publisher(String, '/radio/rover_rx', radio_qos)
+
+        # Radio communication subscribers
+        self.create_subscription(String, '/radio/drone_tx', self.drone_radio_tx_callback, radio_qos)
+        self.create_subscription(String, '/radio/rover_tx', self.rover_radio_tx_callback, radio_qos)
+
         # Services
         self.create_service(Empty, '~/reset', self.reset_callback)
         self.create_service(Trigger, '~/pause', self.pause_callback)
@@ -170,6 +181,50 @@ class MicroSimNode(Node):
         """Handle rover velocity commands."""
         self.rover_cmd['v'] = msg.linear.x
         self.rover_cmd['omega'] = msg.angular.z
+
+    def drone_radio_tx_callback(self, msg: String):
+        """Handle drone transmitting radio message."""
+        # Calculate distance between robots
+        dx = self.drone.state.x - self.rover.state.x
+        dy = self.drone.state.y - self.rover.state.y
+        distance = np.sqrt(dx*dx + dy*dy)
+
+        # Send message through radio link
+        success = self.radio.send_message(
+            from_robot='drone',
+            to_robot='rover',
+            payload=msg.data.encode('utf-8'),
+            current_time=self.timekeeper.get_time(),
+            distance=distance
+        )
+
+        if not success:
+            self.get_logger().debug(
+                f'Radio TX failed: distance={distance:.1f}m, '
+                f'max_range={self.scenario.radio_max_range}m'
+            )
+
+    def rover_radio_tx_callback(self, msg: String):
+        """Handle rover transmitting radio message."""
+        # Calculate distance between robots
+        dx = self.drone.state.x - self.rover.state.x
+        dy = self.drone.state.y - self.rover.state.y
+        distance = np.sqrt(dx*dx + dy*dy)
+
+        # Send message through radio link
+        success = self.radio.send_message(
+            from_robot='rover',
+            to_robot='drone',
+            payload=msg.data.encode('utf-8'),
+            current_time=self.timekeeper.get_time(),
+            distance=distance
+        )
+
+        if not success:
+            self.get_logger().debug(
+                f'Radio TX failed: distance={distance:.1f}m, '
+                f'max_range={self.scenario.radio_max_range}m'
+            )
 
     def simulation_step(self):
         """Main simulation step callback (60 Hz)."""
@@ -204,6 +259,9 @@ class MicroSimNode(Node):
 
         # Update and publish sensors (at their respective rates)
         self.update_sensors(dt, sim_time, timestamp)
+
+        # Process radio message delivery
+        self.update_radio(sim_time, timestamp)
 
     def publish_odometry(self, timestamp):
         """Publish odometry for both robots with proper quaternions."""
@@ -379,6 +437,22 @@ class MicroSimNode(Node):
 
         # No obstacle found, return max range
         return max_range
+
+    def update_radio(self, sim_time: float, timestamp):
+        """Process radio message delivery."""
+        # Check for messages ready to be delivered to drone
+        drone_messages = self.radio.receive_messages('drone', sim_time)
+        for payload in drone_messages:
+            msg = String()
+            msg.data = payload.decode('utf-8')
+            self.drone_radio_rx_pub.publish(msg)
+
+        # Check for messages ready to be delivered to rover
+        rover_messages = self.radio.receive_messages('rover', sim_time)
+        for payload in rover_messages:
+            msg = String()
+            msg.data = payload.decode('utf-8')
+            self.rover_radio_rx_pub.publish(msg)
 
     def reset_callback(self, request, response):
         """Handle reset service."""
