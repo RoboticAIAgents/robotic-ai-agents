@@ -13,13 +13,33 @@ MicroSim provides a lightweight simulation environment with:
 
 ## Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended) 🐳
+
+**No ROS 2 installation required!** Use Docker for a clean, isolated environment.
+
+```bash
+# Start ROS 2 container
+docker-compose up -d
+
+# Enter container
+docker-compose exec ros2 bash
+
+# Inside container: Build and run
+./docker-scripts/build.sh
+./docker-scripts/run_node.sh
+```
+
+**📖 See [DOCKER.md](DOCKER.md) for complete Docker guide**
+
+### Option 2: Native ROS 2
+
+#### Prerequisites
 
 - ROS 2 (Humble or Iron)
 - Python 3.8+
-- NumPy
+- NumPy, PyYAML
 
-### Build
+#### Build
 
 ```bash
 # From workspace root
@@ -29,7 +49,7 @@ colcon build --packages-select microsim
 source install/setup.bash
 ```
 
-### Run
+#### Run
 
 ```bash
 # Start simulator
@@ -56,6 +76,14 @@ ros2 topic pub /drone/cmd_vel geometry_msgs/Twist "{linear: {x: 1.0, y: 0.0, z: 
 - `/rover/odom` (nav_msgs/Odometry) - Ground truth odometry
 - `/rover/gps` (sensor_msgs/NavSatFix) - Noisy GPS position
 - `/rover/range` (sensor_msgs/Range) - Forward-facing distance sensor
+
+### Radio Communication
+- `/radio/drone_tx` (std_msgs/String) - Drone transmit (publish here to send to rover)
+- `/radio/rover_tx` (std_msgs/String) - Rover transmit (publish here to send to drone)
+- `/radio/drone_rx` (std_msgs/String) - Drone receive (subscribe to get messages from rover)
+- `/radio/rover_rx` (std_msgs/String) - Rover receive (subscribe to get messages from drone)
+
+Messages experience realistic network effects: latency (50ms ±10ms), packet loss (1%), distance limiting (100m).
 
 ## Services
 

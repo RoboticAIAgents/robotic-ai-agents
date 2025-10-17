@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # ROS 2 Humble with GUI support
+  ros2:
+    image: osrf/ros:humble-desktop-full
+    container_name: microsim_ros2
+    stdin_open: true
+    tty: true
+    network_mode: host  # Easier ROS 2 networking
+
+    # Mount workspace into container
+    volumes:
+      - .:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw  # For RViz (X11 forwarding)
+
+    # Environment variables
+    environment:
+      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+      - QT_X11_NO_MITSHM=1  # Fix Qt issues with X11
+      - ROS_DOMAIN_ID=0
+
+    # Keep container running
+    command: sleep infinity
+
+    # Optional: run node automatically on startup
+    # command: >
+    #   bash -c "
+    #     cd /workspace &&
+    #     source /opt/ros/humble/setup.bash &&
+    #     colcon build --symlink-install &&
+    #     source install/setup.bash &&
+    #     ros2 run microsim microsim_node
+    #   "
+
+  # Optional: Headless ROS 2 for testing only (no GUI)
+  ros2-headless:
+    image: osrf/ros:humble-ros-base
+    container_name: microsim_ros2_headless
+    stdin_open: true
+    tty: true
+    network_mode: host
+    profiles: ["headless"]  # Only start with --profile headless
+
+    volumes:
+      - .:/workspace
+
+    environment:
+      - ROS_DOMAIN_ID=0
+
+    command: sleep infinity
