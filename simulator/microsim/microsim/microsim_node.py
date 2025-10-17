@@ -404,10 +404,45 @@ class MicroSimNode(Node):
 
             self.rover_range_pub.publish(range_msg)
 
-        # Drone camera (placeholder for Sprint 3)
+        # Drone camera
         if self.drone_camera.update(dt):
-            # TODO: Render and publish image + camera_info in Sprint 3
-            pass
+            # Render image
+            image_array = self.drone_camera.render(
+                self.world,
+                self.drone.state.x,
+                self.drone.state.y,
+                self.drone.state.z,
+                self.drone.state.yaw,
+                self.drone.state.pitch
+            )
+
+            # Publish Image message
+            image_msg = Image()
+            image_msg.header.stamp = timestamp
+            image_msg.header.frame_id = 'drone/camera_link'
+            image_msg.height = self.drone_camera.height
+            image_msg.width = self.drone_camera.width
+            image_msg.encoding = 'rgb8'
+            image_msg.is_bigendian = 0
+            image_msg.step = self.drone_camera.width * 3
+            image_msg.data = image_array.tobytes()
+
+            self.camera_image_pub.publish(image_msg)
+
+            # Publish CameraInfo message
+            camera_info = self.drone_camera.get_camera_info()
+
+            info_msg = CameraInfo()
+            info_msg.header.stamp = timestamp
+            info_msg.header.frame_id = 'drone/camera_link'
+            info_msg.width = camera_info['width']
+            info_msg.height = camera_info['height']
+            info_msg.distortion_model = camera_info['distortion_model']
+            info_msg.d = camera_info['D']
+            info_msg.k = camera_info['K']
+            info_msg.p = camera_info['P']
+
+            self.camera_info_pub.publish(info_msg)
 
     def compute_range(self, x: float, y: float, theta: float) -> float:
         """
