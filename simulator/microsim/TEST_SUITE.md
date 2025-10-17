@@ -2,21 +2,23 @@
 
 ## Overview
 
-Comprehensive unit test suite for MicroSim simulator components. All tests are **standalone** - they don't require ROS 2 to run, making them fast, deterministic, and CI-friendly.
+Comprehensive test suite for MicroSim simulator with two types of tests:
+- **Unit Tests**: Standalone tests that don't require ROS 2 - fast, deterministic, CI-friendly
+- **Integration Tests**: Full system tests that run the actual ROS 2 node and verify behavior
 
 ## Test Statistics
 
-- **Total Tests**: 72
+- **Unit Tests**: 117 tests across 8 files
+- **Integration Tests**: 9 end-to-end scenarios
 - **All Passing**: ✓
-- **Test Files**: 5
-- **Coverage**: Core simulation logic (physics, sensors, world, timing, determinism)
+- **Coverage**: Core simulation logic, ROS 2 integration, sensor publishing, radio communication
 
 ## Running Tests
 
-### Quick Start
+### Unit Tests (Fast, No ROS 2 Required)
 
 ```bash
-# Run all tests
+# Run all unit tests
 python3 -m pytest test/ -v
 
 # Run specific test file
@@ -29,11 +31,29 @@ python3 -m pytest test/ --cov=microsim --cov-report=html
 ./run_tests.sh
 ```
 
-### Prerequisites
+**Prerequisites**: `pip3 install pytest numpy`
+
+### Integration Tests (Requires ROS 2)
 
 ```bash
-pip3 install pytest numpy
+# Run integration tests (starts actual ROS 2 node)
+./run_integration_tests.sh
+
+# Or in Docker
+./docker-scripts/integration_test.sh
 ```
+
+**Prerequisites**:
+- ROS 2 Humble sourced
+- Package built with `colcon build`
+
+**What Integration Tests Verify**:
+- All topics publish at expected rates (~60 Hz odom, ~10 Hz GPS, etc.)
+- Velocity commands cause robots to move correctly
+- Radio communication works with latency/jitter/packet loss
+- GPS readings match odometry positions
+- Camera publishes valid RGB images
+- Range sensor responds to obstacles
 
 ## Test Organization
 
@@ -158,14 +178,31 @@ These tests are designed to run in CI environments:
 5. **Boundary Conditions**: Out-of-bounds, clamping, edge cases
 6. **API Contracts**: All public methods work as documented
 
-## Future Test Additions
+## Integration Test Details
 
-When implementing Sprint 1-4:
-- Camera ray-casting and rendering
-- Radio link message delivery
-- YAML scenario loading
-- ROS 2 node integration tests (require ROS 2)
-- Performance benchmarks (real-time factor ≥ 0.95)
+### [test_integration.py](test/test_integration.py) (9 tests)
+
+End-to-end tests that verify the complete system behavior:
+
+**Test Suite**:
+- ✓ All topics publishing (odom, GPS, range, camera)
+- ✓ Topic rates meet specifications (~60 Hz, ~10 Hz, ~20 Hz)
+- ✓ Drone command-to-movement (velocity commands → position changes)
+- ✓ Rover command-to-movement (diff-drive kinematics)
+- ✓ Radio communication in range (with latency/jitter)
+- ✓ GPS position matches odometry
+- ✓ Camera image format (128x128 RGB, valid intrinsics)
+- ✓ Range sensor responds to obstacles
+- ✓ Message timing and synchronization
+
+**How They Work**:
+1. Start the MicroSim ROS 2 node in background
+2. Create a test node that subscribes to all topics
+3. Publish commands and verify expected behavior
+4. Check message rates, formats, and content
+5. Clean up and report results
+
+**Run Time**: ~30 seconds for full suite
 
 ## Contributing
 

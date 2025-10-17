@@ -14,6 +14,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         # Install scenario files
         (os.path.join('share', package_name, 'scenarios'), glob('scenarios/*.yaml')),
+        # Install launch files
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
