@@ -187,8 +187,7 @@ class MicroSimNode(Node):
         # Main simulation timer (60 Hz)
         self.timer = self.create_timer(1.0/60.0, self.simulation_step)
 
-        # Publish world feature markers once at startup
-        self.publish_world_markers()
+        # World feature markers are now published every frame in publish_robot_markers()
 
         self.get_logger().info('MicroSim node initialized successfully')
 
@@ -609,8 +608,58 @@ class MicroSimNode(Node):
         self.get_logger().info(f'Published {len(marker_array.markers)} world feature markers')
 
     def publish_robot_markers(self, timestamp):
-        """Publish visualization markers for robot bodies."""
+        """Publish visualization markers for robot bodies and world features."""
         marker_array = MarkerArray()
+
+        # First, add world feature markers (obstacles, hazards, targets)
+        for i, feature in enumerate(self.scenario.features):
+            marker = Marker()
+            marker.header.frame_id = 'world'
+            marker.header.stamp = timestamp
+            marker.ns = 'world_features'
+            marker.id = i
+            marker.type = Marker.CYLINDER
+            marker.action = Marker.ADD
+
+            # Position
+            marker.pose.position.x = feature.position[0]
+            marker.pose.position.y = feature.position[1]
+            marker.pose.position.z = feature.height / 2.0  # Center of cylinder
+            marker.pose.orientation.w = 1.0
+
+            # Size
+            marker.scale.x = feature.radius * 2.0  # Diameter
+            marker.scale.y = feature.radius * 2.0
+            marker.scale.z = max(feature.height, 0.1)  # Min height for visibility
+
+            # Color based on type
+            marker.color = ColorRGBA()
+            if feature.type == 'obstacle':
+                # Green
+                marker.color.r = 60.0 / 255.0
+                marker.color.g = 179.0 / 255.0
+                marker.color.b = 113.0 / 255.0
+                marker.color.a = 0.8
+            elif feature.type == 'hazard':
+                # Yellow
+                marker.color.r = 1.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.color.a = 0.6
+            elif feature.type == 'target':
+                # Cyan
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 1.0
+                marker.color.a = 0.6
+            else:
+                # Default gray
+                marker.color.r = 0.5
+                marker.color.g = 0.5
+                marker.color.b = 0.5
+                marker.color.a = 0.5
+
+            marker_array.markers.append(marker)
 
         # Drone body marker (quadcopter-like shape)
         drone_marker = Marker()

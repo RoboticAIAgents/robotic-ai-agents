@@ -185,12 +185,15 @@ class MicroSimViz2D(Node):
         """Update world features from markers"""
         self.world_features = []
         for marker in msg.markers:
-            if marker.ns in ['obstacle', 'hazard', 'target']:
+            # World features are published with ns='world_features'
+            if marker.ns == 'world_features':
                 feature = {
-                    'type': marker.ns,
+                    'type': 'feature',  # Generic type, color already set
                     'x': marker.pose.position.x,
                     'y': marker.pose.position.y,
+                    'z': marker.pose.position.z,
                     'radius': marker.scale.x / 2.0,  # diameter to radius
+                    'height': marker.scale.z,  # height for 3D cylinders
                     'color': (marker.color.r, marker.color.g, marker.color.b)
                 }
                 self.world_features.append(feature)
@@ -296,18 +299,23 @@ class MicroSimViz2D(Node):
 
         # Draw world features as 3D cylinders
         for feature in self.world_features:
-            # Create cylinder
+            # Create cylinder using actual height from marker
             radius = feature['radius']
-            height = 5.0 if feature['type'] == 'obstacle' else 0.5  # Obstacles taller
+            height = feature['height']  # Use actual height from marker
+            z_center = feature['z']  # Marker z is at cylinder center
+
             theta = np.linspace(0, 2*np.pi, 20)
-            z_cyl = np.linspace(0, height, 10)
+            # Cylinder from bottom to top
+            z_bottom = z_center - height / 2.0
+            z_top = z_center + height / 2.0
+            z_cyl = np.linspace(z_bottom, z_top, 10)
             theta_grid, z_grid = np.meshgrid(theta, z_cyl)
             x_cyl = feature['x'] + radius * np.cos(theta_grid)
             y_cyl = feature['y'] + radius * np.sin(theta_grid)
 
             surf = self.ax_3d.plot_surface(x_cyl, y_cyl, z_grid,
-                                          color=feature['color'], alpha=0.6,
-                                          edgecolor='none')
+                                          color=feature['color'], alpha=0.7,
+                                          edgecolor='black', linewidth=0.5)
             self.feature_3d_artists.append(surf)
 
         # Draw drone as 3D arrow (quiver)
