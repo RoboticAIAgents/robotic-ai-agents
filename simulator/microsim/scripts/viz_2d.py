@@ -86,7 +86,7 @@ class MicroSimViz2D(Node):
         self.ax_3d.view_init(elev=VIEW_3D_ELEVATION, azim=VIEW_3D_AZIMUTH)
 
         # Camera view setup
-        self.ax_camera.set_title('Drone Camera Feed (128x128)')
+        self.camera_title = self.ax_camera.set_title('Drone Camera Feed')
         self.ax_camera.axis('off')
 
         # Data storage
@@ -204,6 +204,9 @@ class MicroSimViz2D(Node):
             # Convert ROS Image to numpy array
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
             self.camera_image = cv_image
+            # Update title with actual resolution
+            h, w = cv_image.shape[:2]
+            self.camera_title.set_text(f'Drone Camera Feed ({w}×{h})')
         except Exception as e:
             self.get_logger().error(f'Error converting image: {e}')
 

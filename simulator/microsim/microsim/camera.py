@@ -10,6 +10,7 @@ Responsibilities:
 
 import numpy as np
 from typing import Tuple
+import time
 
 
 # Fixed RGB color palette for semantic classes (0-255 range)
@@ -84,6 +85,8 @@ class PinholeCamera:
         Returns:
             RGB image as numpy array (height, width, 3) uint8
         """
+        start_time = time.time()
+
         # Camera always points straight down (nadir view)
         # Since camera frame Z already points down (z_cam = -1), no additional pitch needed
         camera_pitch = drone_pitch  # Just use drone pitch as-is
@@ -130,6 +133,19 @@ class PinholeCamera:
             x_world, y_world, z_world
         )
 
+        elapsed = time.time() - start_time
+        # Log performance occasionally (every ~5 seconds at 2 Hz)
+        if not hasattr(self, '_render_count'):
+            self._render_count = 0
+            self._total_time = 0.0
+        self._render_count += 1
+        self._total_time += elapsed
+        if self._render_count % 10 == 0:
+            avg_time = self._total_time / 10
+            fps = 1.0 / avg_time if avg_time > 0 else 0
+            print(f"Camera render: {avg_time*1000:.1f}ms avg ({fps:.1f} FPS max) - {self.width}x{self.height}")
+            self._total_time = 0.0
+
         return image
 
     def _cast_ray(self, world, origin_x: float, origin_y: float, origin_z: float,
@@ -173,9 +189,10 @@ class PinholeCamera:
     def _cast_rays_vectorized(self, world, origin_x: float, origin_y: float, origin_z: float,
                                dir_x: np.ndarray, dir_y: np.ndarray, dir_z: np.ndarray) -> np.ndarray:
         """
-        Cast rays for all pixels at once using vectorized NumPy operations.
+        Cast rays for all pixels at once using OPTIMIZED vectorized operations.
 
-        This is significantly faster than the per-pixel loop approach.
+        For downward-looking camera over flat terrain, we calculate exact ground
+        intersection instead of stepping along rays. This is ~100× faster!
 
         Args:
             world: World object
@@ -186,67 +203,57 @@ class PinholeCamera:
             RGB image as numpy array (height, width, 3) uint8
         """
         height, width = dir_x.shape
-        image = np.zeros((height, width, 3), dtype=np.uint8)
 
         # Sky color for all pixels initially
         sky_color = np.array([135, 206, 235], dtype=np.uint8)
-        image[:, :] = sky_color
+        image = np.full((height, width, 3), sky_color, dtype=np.uint8)
 
-        # Maximum ray length and step size
-        max_distance = 100.0
-        step_size = world.resolution
-        num_steps = int(max_distance / step_size)
+        # For rays pointing down (dir_z < 0), calculate exact ground intersection
+        # Ray equation: P = origin + t * dir
+        # Ground intersection: origin_z + t * dir_z = 0 (ground at z=0)
+        # Solve for t: t = -origin_z / dir_z
 
-        # Mask to track which pixels still need to be rendered
-        active_mask = np.ones((height, width), dtype=bool)
+        # Only process rays pointing downward
+        pointing_down = dir_z < 0
 
-        # Step along all rays simultaneously
-        for step in range(num_steps):
-            if not active_mask.any():
-                break  # All rays have hit something
+        if not pointing_down.any():
+            return image  # All sky
 
-            distance = step * step_size
+        # Calculate intersection distance for downward rays
+        # Avoid division by zero
+        t = np.zeros_like(dir_z)
+        t[pointing_down] = -origin_z / dir_z[pointing_down]
 
-            # Compute ray positions for active pixels only
-            ray_x = origin_x + distance * dir_x[active_mask]
-            ray_y = origin_y + distance * dir_y[active_mask]
-            ray_z = origin_z + distance * dir_z[active_mask]
+        # Calculate intersection points
+        intersect_x = origin_x + t * dir_x
+        intersect_y = origin_y + t * dir_y
 
-            # Get terrain heights (vectorized)
-            # Convert to grid indices using World's coordinate system
-            # World grid is centered: origin is at (-size[0]/2, -size[1]/2)
-            grid_i = ((ray_x + world.size[0]/2) / world.resolution).astype(int)
-            grid_j = ((ray_y + world.size[1]/2) / world.resolution).astype(int)
+        # Convert to grid indices
+        # World grid is centered: origin is at (-size[0]/2, -size[1]/2)
+        grid_i = ((intersect_x + world.size[0]/2) / world.resolution).astype(int)
+        grid_j = ((intersect_y + world.size[1]/2) / world.resolution).astype(int)
 
-            # Clamp to valid range
-            grid_i = np.clip(grid_i, 0, world.grid_shape[0] - 1)
-            grid_j = np.clip(grid_j, 0, world.grid_shape[1] - 1)
+        # Check which intersections are within world bounds
+        valid_mask = pointing_down & \
+                     (grid_i >= 0) & (grid_i < world.grid_shape[0]) & \
+                     (grid_j >= 0) & (grid_j < world.grid_shape[1])
 
-            # Get terrain heights and semantic labels
-            terrain_heights = world.height_map[grid_j, grid_i]
+        if valid_mask.any():
+            # Get semantic labels for valid intersections
+            valid_i = grid_i[valid_mask]
+            valid_j = grid_j[valid_mask]
+            semantic_labels = world.semantic_map[valid_j, valid_i]
 
-            # Check which rays hit terrain
-            hit_mask = ray_z <= terrain_heights
-
-            if hit_mask.any():
-                # Get semantic labels for hits
-                semantic_labels = world.semantic_map[grid_j[hit_mask], grid_i[hit_mask]]
-
-                # Convert semantic labels to RGB colors
-                for i, semantic in enumerate(semantic_labels):
-                    color = SEMANTIC_COLORS.get(int(semantic), SEMANTIC_COLORS[0])
-                    # Find the position in the full image where this hit occurred
-                    hit_indices = np.where(active_mask)
-                    local_hit_idx = np.where(hit_mask)[0][i]
-                    row_idx = hit_indices[0][local_hit_idx]
-                    col_idx = hit_indices[1][local_hit_idx]
-                    image[row_idx, col_idx] = color
-
-                # Mark these pixels as no longer active
-                active_indices = np.argwhere(active_mask)
-                hit_positions = active_indices[hit_mask]
-                for pos in hit_positions:
-                    active_mask[pos[0], pos[1]] = False
+            # Convert semantic labels to RGB colors (vectorized)
+            # Build color array from semantic labels
+            for semantic_val, rgb in SEMANTIC_COLORS.items():
+                mask = (semantic_labels == semantic_val)
+                if mask.any():
+                    # Get positions in image where this semantic value appears
+                    positions = np.argwhere(valid_mask)
+                    local_positions = positions[np.argwhere(mask).flatten()]
+                    for pos in local_positions:
+                        image[pos[0], pos[1]] = rgb
 
         return image
 

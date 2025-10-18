@@ -2,7 +2,7 @@
 
 world:
   size: [100.0, 100.0] # meters (x, y)
-  resolution: 0.5 # meters per grid cell
+  resolution: 0.1 # meters per grid cell (finer detail: was 0.5m, now 0.1m)
 
 robots:
   drone:
@@ -33,9 +33,9 @@ sensors:
     noise_std: 0.05
 
   camera:
-    width: 128
-    height: 128
-    fov_deg: 90.0
+    width: 256
+    height: 256
+    fov_deg: 60.0
     rate_hz: 2.0
 
 radio:
@@ -44,8 +44,9 @@ radio:
   jitter: 0.01
   packet_loss: 0.01
 
-# Obstacles and features
+# Obstacles and features (mix of large and small for varied detail)
 features:
+  # Large features (original)
   - type: obstacle
     position: [10.0, 10.0]
     radius: 3.0
@@ -59,4 +60,52 @@ features:
   - type: target
     position: [20.0, -10.0]
     radius: 2.0
+    height: 0.0
+
+  # Small obstacles (rocks, trees)
+  - type: obstacle
+    position: [5.0, 3.0]
+    radius: 0.5
+    height: 2.0
+
+  - type: obstacle
+    position: [7.0, 5.0]
+    radius: 0.3
+    height: 1.5
+
+  - type: obstacle
+    position: [12.0, 8.0]
+    radius: 0.8
+    height: 3.0
+
+  # Small hazards (puddles, rough terrain)
+  - type: hazard
+    position: [2.0, -5.0]
+    radius: 1.0
+    height: 0.0
+
+  - type: hazard
+    position: [-5.0, -8.0]
+    radius: 0.7
+    height: 0.0
+
+  - type: hazard
+    position: [8.0, -3.0]
+    radius: 1.5
+    height: 0.0
+
+  # Small targets (landing pads, markers)
+  - type: target
+    position: [0.0, 5.0]
+    radius: 0.5
+    height: 0.0
+
+  - type: target
+    position: [-3.0, 8.0]
+    radius: 0.8
+    height: 0.0
+
+  - type: target
+    position: [15.0, -5.0]
+    radius: 0.6
     height: 0.0
