@@ -17,7 +17,8 @@ from geometry_msgs.msg import Twist, Quaternion
 from sensor_msgs.msg import NavSatFix, Range, Image, CameraInfo, NavSatStatus
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Trigger, Empty
-from std_msgs.msg import Header, String
+from std_msgs.msg import Header, String, ColorRGBA
+from visualization_msgs.msg import Marker, MarkerArray
 import numpy as np
 
 from microsim.timekeeper import Timekeeper
@@ -41,9 +42,24 @@ class MicroSimNode(Node):
 
         # Load scenario configuration
         if scenario_file is None:
-            # Use default scenario
+            # For development: always use source directory YAML file
+            # This allows live editing without reinstalling
             pkg_dir = os.path.dirname(os.path.dirname(__file__))
-            scenario_file = os.path.join(pkg_dir, 'scenarios', 'default.yaml')
+            source_scenario = os.path.join(pkg_dir, 'scenarios', 'default.yaml')
+
+            # Check if we're in development mode (source file exists)
+            if os.path.exists(source_scenario):
+                scenario_file = source_scenario
+                self.get_logger().info('Using scenario from source directory (development mode)')
+            else:
+                # Production: use installed package scenario
+                from ament_index_python.packages import get_package_share_directory
+                try:
+                    pkg_share = get_package_share_directory('microsim')
+                    scenario_file = os.path.join(pkg_share, 'scenarios', 'default.yaml')
+                    self.get_logger().info('Using scenario from installed package')
+                except Exception:
+                    raise FileNotFoundError('Could not find scenario file in source or installed package')
 
         self.get_logger().info(f'Loading scenario from: {scenario_file}')
         self.scenario = ScenarioLoader.load_from_file(scenario_file)
@@ -154,6 +170,9 @@ class MicroSimNode(Node):
         self.create_subscription(String, '/radio/drone_tx', self.drone_radio_tx_callback, radio_qos)
         self.create_subscription(String, '/radio/rover_tx', self.rover_radio_tx_callback, radio_qos)
 
+        # Visualization markers publisher
+        self.markers_pub = self.create_publisher(MarkerArray, '/world/markers', 10)
+
         # Services
         self.create_service(Empty, '~/reset', self.reset_callback)
         self.create_service(Trigger, '~/pause', self.pause_callback)
@@ -167,6 +186,9 @@ class MicroSimNode(Node):
 
         # Main simulation timer (60 Hz)
         self.timer = self.create_timer(1.0/60.0, self.simulation_step)
+
+        # Publish world feature markers once at startup
+        self.publish_world_markers()
 
         self.get_logger().info('MicroSim node initialized successfully')
 
@@ -256,6 +278,9 @@ class MicroSimNode(Node):
 
         # Publish odometry (every step)
         self.publish_odometry(timestamp)
+
+        # Publish robot body markers
+        self.publish_robot_markers(timestamp)
 
         # Update and publish sensors (at their respective rates)
         self.update_sensors(dt, sim_time, timestamp)
@@ -413,7 +438,7 @@ class MicroSimNode(Node):
                 self.drone.state.y,
                 self.drone.state.z,
                 self.drone.state.yaw,
-                self.drone.state.pitch
+                0.0  # Camera always level (ignores drone pitch for downward view)
             )
 
             # Publish Image message
@@ -519,6 +544,196 @@ class MicroSimNode(Node):
         response.success = True
         response.message = status
         return response
+
+    def publish_world_markers(self):
+        """Publish visualization markers for world features (obstacles, hazards, targets)."""
+        marker_array = MarkerArray()
+
+        for i, feature in enumerate(self.scenario.features):
+            marker = Marker()
+            marker.header.frame_id = 'world'
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = 'world_features'
+            marker.id = i
+            marker.type = Marker.CYLINDER
+            marker.action = Marker.ADD
+
+            # Position
+            marker.pose.position.x = feature.position[0]
+            marker.pose.position.y = feature.position[1]
+            marker.pose.position.z = feature.height / 2.0  # Center of cylinder
+            marker.pose.orientation.w = 1.0
+
+            # Size
+            marker.scale.x = feature.radius * 2.0  # Diameter
+            marker.scale.y = feature.radius * 2.0
+            marker.scale.z = max(feature.height, 0.1)  # Min height for visibility
+
+            # Color based on type
+            marker.color = ColorRGBA()
+            if feature.type == 'obstacle':
+                # Green (matching camera semantic color)
+                marker.color.r = 60.0 / 255.0
+                marker.color.g = 179.0 / 255.0
+                marker.color.b = 113.0 / 255.0
+                marker.color.a = 0.8
+            elif feature.type == 'hazard':
+                # Yellow
+                marker.color.r = 1.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.color.a = 0.6
+            elif feature.type == 'target':
+                # Cyan
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 1.0
+                marker.color.a = 0.6
+            elif feature.type == 'water':
+                # Blue
+                marker.color.r = 0.0
+                marker.color.g = 0.0
+                marker.color.b = 1.0
+                marker.color.a = 0.6
+            else:
+                # Default gray
+                marker.color.r = 0.5
+                marker.color.g = 0.5
+                marker.color.b = 0.5
+                marker.color.a = 0.5
+
+            marker_array.markers.append(marker)
+
+        # Publish the marker array
+        self.markers_pub.publish(marker_array)
+        self.get_logger().info(f'Published {len(marker_array.markers)} world feature markers')
+
+    def publish_robot_markers(self, timestamp):
+        """Publish visualization markers for robot bodies."""
+        marker_array = MarkerArray()
+
+        # Drone body marker (quadcopter-like shape)
+        drone_marker = Marker()
+        drone_marker.header.frame_id = 'drone/base_link'
+        drone_marker.header.stamp = timestamp
+        drone_marker.ns = 'robot_bodies'
+        drone_marker.id = 0
+        drone_marker.type = Marker.CUBE
+        drone_marker.action = Marker.ADD
+
+        # Drone dimensions (quadcopter body)
+        drone_marker.scale.x = 0.4  # 40cm wide
+        drone_marker.scale.y = 0.4  # 40cm deep
+        drone_marker.scale.z = 0.1  # 10cm tall (flat body)
+
+        # Dark gray/black color
+        drone_marker.color.r = 0.2
+        drone_marker.color.g = 0.2
+        drone_marker.color.b = 0.2
+        drone_marker.color.a = 1.0
+
+        # Center the marker
+        drone_marker.pose.position.x = 0.0
+        drone_marker.pose.position.y = 0.0
+        drone_marker.pose.position.z = 0.0
+        drone_marker.pose.orientation.w = 1.0
+
+        marker_array.markers.append(drone_marker)
+
+        # Drone propeller markers (4 small cylinders at corners)
+        propeller_positions = [
+            (0.2, 0.2),   # Front-right
+            (0.2, -0.2),  # Front-left
+            (-0.2, 0.2),  # Back-right
+            (-0.2, -0.2)  # Back-left
+        ]
+
+        for i, (px, py) in enumerate(propeller_positions):
+            prop = Marker()
+            prop.header.frame_id = 'drone/base_link'
+            prop.header.stamp = timestamp
+            prop.ns = 'robot_bodies'
+            prop.id = 1 + i
+            prop.type = Marker.CYLINDER
+            prop.action = Marker.ADD
+
+            # Propeller dimensions
+            prop.scale.x = 0.15  # 15cm diameter
+            prop.scale.y = 0.15
+            prop.scale.z = 0.02  # Very thin
+
+            # Red color for propellers (makes them visible)
+            prop.color.r = 0.8
+            prop.color.g = 0.1
+            prop.color.b = 0.1
+            prop.color.a = 0.8
+
+            # Position at corner
+            prop.pose.position.x = px
+            prop.pose.position.y = py
+            prop.pose.position.z = 0.1  # Above the body
+            prop.pose.orientation.w = 1.0
+
+            marker_array.markers.append(prop)
+
+        # Rover body marker (box-like ground robot)
+        rover_marker = Marker()
+        rover_marker.header.frame_id = 'rover/base_link'
+        rover_marker.header.stamp = timestamp
+        rover_marker.ns = 'robot_bodies'
+        rover_marker.id = 10
+        rover_marker.type = Marker.CUBE
+        rover_marker.action = Marker.ADD
+
+        # Rover dimensions (small ground robot)
+        rover_marker.scale.x = 0.6  # 60cm long
+        rover_marker.scale.y = 0.4  # 40cm wide
+        rover_marker.scale.z = 0.3  # 30cm tall
+
+        # Blue color for rover
+        rover_marker.color.r = 0.2
+        rover_marker.color.g = 0.4
+        rover_marker.color.b = 0.8
+        rover_marker.color.a = 1.0
+
+        # Raise slightly off ground (half height)
+        rover_marker.pose.position.x = 0.0
+        rover_marker.pose.position.y = 0.0
+        rover_marker.pose.position.z = 0.15  # Half of height
+        rover_marker.pose.orientation.w = 1.0
+
+        marker_array.markers.append(rover_marker)
+
+        # Rover "sensor" marker (small sphere on top)
+        rover_sensor = Marker()
+        rover_sensor.header.frame_id = 'rover/base_link'
+        rover_sensor.header.stamp = timestamp
+        rover_sensor.ns = 'robot_bodies'
+        rover_sensor.id = 11
+        rover_sensor.type = Marker.SPHERE
+        rover_sensor.action = Marker.ADD
+
+        # Small sensor dome
+        rover_sensor.scale.x = 0.15
+        rover_sensor.scale.y = 0.15
+        rover_sensor.scale.z = 0.15
+
+        # Orange color
+        rover_sensor.color.r = 1.0
+        rover_sensor.color.g = 0.5
+        rover_sensor.color.b = 0.0
+        rover_sensor.color.a = 1.0
+
+        # Position on top of rover
+        rover_sensor.pose.position.x = 0.1
+        rover_sensor.pose.position.y = 0.0
+        rover_sensor.pose.position.z = 0.35  # On top
+        rover_sensor.pose.orientation.w = 1.0
+
+        marker_array.markers.append(rover_sensor)
+
+        # Publish robot markers
+        self.markers_pub.publish(marker_array)
 
 
 def main(args=None):

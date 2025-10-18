@@ -94,10 +94,10 @@ class TFBroadcaster:
         t.header.frame_id = 'drone/base_link'
         t.child_frame_id = 'drone/camera_link'
 
-        # Camera mounted forward, slightly down
-        t.transform.translation.x = 0.1
+        # Camera mounted forward and above the body (clear of propellers)
+        t.transform.translation.x = 0.15  # 15cm forward
         t.transform.translation.y = 0.0
-        t.transform.translation.z = -0.05
+        t.transform.translation.z = 0.05  # 5cm above body (not below)
 
         # Camera pitched down 15 degrees
         quat = self._euler_to_quaternion(0.0, np.radians(15.0), 0.0)

@@ -29,38 +29,65 @@ docker-compose exec ros2 bash
 ./docker-scripts/run_node.sh
 ```
 
-**📖 See [DOCKER.md](DOCKER.md) for complete Docker guide**
+**📖 See [docs/DOCKER.md](docs/DOCKER.md) for complete Docker guide**
 
-### Option 2: Native ROS 2
+### Option 2: Native ROS 2 (macOS/Linux)
 
 #### Prerequisites
 
-- ROS 2 (Humble or Iron)
+- ROS 2 Humble (via robostack on macOS, or native on Linux)
 - Python 3.8+
-- NumPy, PyYAML
+- NumPy, PyYAML, matplotlib (for visualization)
+
+#### Install on macOS
+
+```bash
+# Install miniforge
+curl -L -O https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-arm64.sh
+bash Miniforge3-MacOSX-arm64.sh
+
+# Create ROS 2 environment
+conda create -n ros2_humble
+conda activate ros2_humble
+conda install -c robostack-staging ros-humble-desktop python=3.11
+
+# Install dependencies
+conda install matplotlib numpy pyyaml
+```
 
 #### Build
 
 ```bash
-# From workspace root
-colcon build --packages-select microsim
+# Navigate to workspace
+cd /path/to/microsim
 
-# Source the workspace
+# Install in editable mode (allows live YAML editing)
+pip install -e . --no-deps
+
+# Or use colcon (traditional ROS 2 way)
+colcon build --packages-select microsim
 source install/setup.bash
 ```
 
 #### Run
 
 ```bash
-# Start simulator
+# Terminal 1: Start simulator
+conda activate ros2_humble
+source install/setup.bash  # if using colcon
 ros2 run microsim microsim_node
 
-# In another terminal, visualize in RViz2
-rviz2
+# Terminal 2: Launch visualization (macOS-compatible)
+conda activate ros2_humble
+python3 scripts/viz_2d.py
 
-# Send velocity commands (example)
-ros2 topic pub /drone/cmd_vel geometry_msgs/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
+# Terminal 3: Send velocity commands
+conda activate ros2_humble
+ros2 topic pub /drone/cmd_vel geometry_msgs/Twist \
+  "{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {z: 0.5}}" --rate 10
 ```
+
+**Note:** RViz2 has stability issues on macOS. Use the included `scripts/viz_2d.py` for visualization instead.
 
 ## Topics
 
@@ -110,29 +137,23 @@ world
 - **tf_broadcaster.py** - TF transform publishing
 - **microsim_node.py** - Main ROS 2 node
 
-## Development Status
+## Documentation
 
-**Sprint 0 Complete** ✓
-- Package structure created
-- Module skeletons implemented
-- Basic node infrastructure
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** - Get started in 3 steps
+- **[docs/USAGE.md](docs/USAGE.md)** - Complete command reference
+- **[docs/TEST_SUITE.md](docs/TEST_SUITE.md)** - Test documentation
+- **[docs/DOCKER.md](docs/DOCKER.md)** - Docker setup guide
 
-**Sprint 1** (In Progress)
-- Core simulation loop
-- World grid and obstacles
-- Full sensor implementations
+## Features
 
-**Sprint 2** (Planned)
-- YAML scenario loading
-- Radio link integration
-
-**Sprint 3** (Planned)
-- RGB camera ray-casting and rendering
-- CameraInfo publishing
-
-**Sprint 4** (Planned)
-- Determinism verification
-- Documentation and acceptance tests
+✓ **Deterministic simulation** - Fixed timestep (60 Hz), seeded RNGs
+✓ **Dual robots** - 6-DOF drone + differential-drive rover
+✓ **Rich sensors** - GPS (noisy), downward camera (128×128 RGB), range sensor
+✓ **Radio link** - Inter-robot communication with latency/jitter/packet loss
+✓ **World features** - Obstacles, hazards, targets with semantic labeling
+✓ **Live editing** - Modify scenario YAML without reinstalling
+✓ **macOS support** - Native visualization using matplotlib
+✓ **Comprehensive tests** - 72 unit tests + 8 integration tests, all passing
 
 ## License
 

@@ -7,7 +7,10 @@ services:
     container_name: microsim_ros2
     stdin_open: true
     tty: true
-    network_mode: host  # Easier ROS 2 networking
+    # Use bridge networking for Mac compatibility (host mode doesn't work on Mac)
+    ports:
+      - "7400-7410:7400-7410/udp"  # DDS discovery and data ports
+      - "11311:11311"               # ROS master (if needed)
 
     # Mount workspace into container
     volumes:
@@ -16,9 +19,11 @@ services:
 
     # Environment variables
     environment:
-      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+      - DISPLAY=host.docker.internal:0  # Mac-specific X11 forwarding
       - QT_X11_NO_MITSHM=1  # Fix Qt issues with X11
       - ROS_DOMAIN_ID=0
+      - LIBGL_ALWAYS_INDIRECT=0  # Better OpenGL support
+      - ROS_LOCALHOST_ONLY=0     # Allow external connections
 
     # Keep container running
     command: sleep infinity

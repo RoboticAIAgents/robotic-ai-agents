@@ -1,8 +1,8 @@
 # MicroSim Default Scenario
 
 world:
-  size: [100.0, 100.0]  # meters (x, y)
-  resolution: 0.5        # meters per grid cell
+  size: [100.0, 100.0] # meters (x, y)
+  resolution: 0.5 # meters per grid cell
 
 robots:
   drone:
@@ -25,7 +25,7 @@ robots:
 sensors:
   gps:
     rate_hz: 10.0
-    noise_std: 0.1  # meters
+    noise_std: 0.1 # meters
 
   range:
     rate_hz: 20.0
@@ -40,7 +40,7 @@ sensors:
 
 radio:
   max_range: 100.0
-  base_latency: 0.05  # seconds
+  base_latency: 0.05 # seconds
   jitter: 0.01
   packet_loss: 0.01
 

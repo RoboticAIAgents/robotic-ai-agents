@@ -84,8 +84,9 @@ class PinholeCamera:
         Returns:
             RGB image as numpy array (height, width, 3) uint8
         """
-        # Camera is pitched down 15 degrees relative to drone
-        camera_pitch = drone_pitch + np.radians(15.0)
+        # Camera always points straight down (nadir view)
+        # Since camera frame Z already points down (z_cam = -1), no additional pitch needed
+        camera_pitch = drone_pitch  # Just use drone pitch as-is
 
         # Precompute rotation matrices
         cos_yaw = np.cos(drone_yaw)
@@ -97,9 +98,11 @@ class PinholeCamera:
         u_coords, v_coords = np.meshgrid(np.arange(self.width), np.arange(self.height))
 
         # Compute ray directions in camera frame for ALL pixels at once
+        # Camera coordinate system: X=right, Y=down, Z=forward
+        # For a downward-looking camera, Z should point down (negative in world Z)
         x_cam = (u_coords - self.cx) / self.fx
         y_cam = (v_coords - self.cy) / self.fy
-        z_cam = np.ones_like(x_cam)
+        z_cam = -np.ones_like(x_cam)  # Negative Z = camera points down
 
         # Normalize ray directions
         ray_length = np.sqrt(x_cam**2 + y_cam**2 + z_cam**2)
@@ -109,6 +112,8 @@ class PinholeCamera:
 
         # Rotate rays to world frame (vectorized)
         # First apply pitch (rotation around x-axis)
+        # Standard rotation matrix: Rx(θ) where positive pitch is nose-up
+        # Note: Camera already points down (z_cam < 0), pitch adjusts from there
         x_pitch = x_cam
         y_pitch = y_cam * cos_pitch - z_cam * sin_pitch
         z_pitch = y_cam * sin_pitch + z_cam * cos_pitch

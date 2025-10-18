@@ -23,7 +23,6 @@ setup(
     maintainer_email='you@example.com',
     description='MicroSim - Minimal deterministic ROS 2 simulator for Drone and Rover agents',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'microsim_node = microsim.microsim_node:main',
