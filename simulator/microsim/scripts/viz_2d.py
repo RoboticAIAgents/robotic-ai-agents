@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-2D visualization tool for MicroSim using matplotlib
+3D visualization tool for MicroSim using matplotlib
 More stable on macOS than RViz - no OpenGL required
+
+Configuration:
+Edit the VIEW_SCALE parameters below to adjust the viewing volume.
 """
 
 import rclpy
@@ -12,26 +15,75 @@ from visualization_msgs.msg import MarkerArray
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.animation import FuncAnimation
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Line3D
 import numpy as np
 from cv_bridge import CvBridge
 
 
+# ============================================================================
+# VISUALIZATION CONFIGURATION
+# ============================================================================
+# Adjust these values to change the viewing volume and scale
+#
+# Tips:
+# - For low-altitude flights (0-10m): Try Z_LIMIT=10, X/Y_LIMIT=20
+# - For high-altitude flights (0-50m): Try Z_LIMIT=50, X/Y_LIMIT=50
+# - Smaller limits = robots appear larger and easier to see
+# - Larger limits = more of the world visible, but robots appear smaller
+#
+# The 2D map shows the entire world from above.
+# The 3D view can be zoomed in to focus on the robots.
+
+# 2D Map view limits (X-Y plane, top-down)
+MAP_X_LIMIT = 50  # meters (±X range, shows full world)
+MAP_Y_LIMIT = 50  # meters (±Y range, shows full world)
+
+# 3D Perspective view limits (focused on robots)
+VIEW_3D_X_LIMIT = 30  # meters (±X range, zoom in for better visibility)
+VIEW_3D_Y_LIMIT = 30  # meters (±Y range, zoom in for better visibility)
+VIEW_3D_Z_LIMIT = 15  # meters (0 to Z_max, altitude range)
+
+# 3D View angle (can also rotate interactively with mouse)
+VIEW_3D_ELEVATION = 20  # degrees (viewing angle above horizontal, 0=side view, 90=top view)
+VIEW_3D_AZIMUTH = 45    # degrees (viewing angle rotation, 0=view from +Y, 90=view from +X)
+
+# ============================================================================
+
+
 class MicroSimViz2D(Node):
     def __init__(self):
-        super().__init__('microsim_viz_2d')
+        super().__init__('microsim_viz_3d')
 
-        # Create figure with subplots
-        self.fig, (self.ax_map, self.ax_camera) = plt.subplots(1, 2, figsize=(14, 7))
-        self.fig.canvas.manager.set_window_title('MicroSim 2D Visualization')
+        # Create figure with subplots: 2x2 grid
+        # Top-left: 2D map, Bottom-left: 3D view, Right: Camera (spans both rows)
+        self.fig = plt.figure(figsize=(16, 9))
+        gs = self.fig.add_gridspec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1])
 
-        # Map view setup
-        self.ax_map.set_xlim(-50, 50)
-        self.ax_map.set_ylim(-50, 50)
+        self.ax_map = self.fig.add_subplot(gs[0, 0])  # Top-left: 2D map
+        self.ax_3d = self.fig.add_subplot(gs[1, 0], projection='3d')  # Bottom-left: 3D view
+        self.ax_camera = self.fig.add_subplot(gs[:, 1])  # Right: Camera (full height)
+
+        self.fig.canvas.manager.set_window_title('MicroSim 3D Visualization')
+
+        # Map view setup (2D top-down)
+        self.ax_map.set_xlim(-MAP_X_LIMIT, MAP_X_LIMIT)
+        self.ax_map.set_ylim(-MAP_Y_LIMIT, MAP_Y_LIMIT)
         self.ax_map.set_aspect('equal')
         self.ax_map.grid(True, alpha=0.3)
         self.ax_map.set_xlabel('X (meters) - East')
         self.ax_map.set_ylabel('Y (meters) - North')
-        self.ax_map.set_title('Top-Down View')
+        self.ax_map.set_title('Top-Down View (2D)')
+
+        # 3D view setup
+        self.ax_3d.set_xlim(-VIEW_3D_X_LIMIT, VIEW_3D_X_LIMIT)
+        self.ax_3d.set_ylim(-VIEW_3D_Y_LIMIT, VIEW_3D_Y_LIMIT)
+        self.ax_3d.set_zlim(0, VIEW_3D_Z_LIMIT)
+        self.ax_3d.set_xlabel('X (meters) - East')
+        self.ax_3d.set_ylabel('Y (meters) - North')
+        self.ax_3d.set_zlabel('Z (meters) - Up')
+        self.ax_3d.set_title('3D Perspective View')
+        self.ax_3d.view_init(elev=VIEW_3D_ELEVATION, azim=VIEW_3D_AZIMUTH)
 
         # Camera view setup
         self.ax_camera.set_title('Drone Camera Feed (128x128)')
@@ -45,17 +97,26 @@ class MicroSimViz2D(Node):
         self.world_features = []
         self.camera_image = None
 
-        # Plot elements (will be created on first update)
+        # Plot elements for 2D view (will be created on first update)
         self.drone_marker = None
         self.rover_marker = None
         self.drone_trail, = self.ax_map.plot([], [], 'r-', alpha=0.3, linewidth=1, label='Drone trail')
         self.rover_trail, = self.ax_map.plot([], [], 'b-', alpha=0.3, linewidth=1, label='Rover trail')
         self.drone_trail_x = []
         self.drone_trail_y = []
+        self.drone_trail_z = []
         self.rover_trail_x = []
         self.rover_trail_y = []
+        self.rover_trail_z = []
         self.camera_img_plot = None
         self.feature_patches = []
+
+        # Plot elements for 3D view
+        self.drone_3d_quiver = None
+        self.rover_3d_quiver = None
+        self.drone_trail_3d = None
+        self.rover_trail_3d = None
+        self.feature_3d_artists = []
 
         # Text display for altitude
         self.drone_alt_text = self.ax_map.text(0.02, 0.98, '', transform=self.ax_map.transAxes,
@@ -78,7 +139,7 @@ class MicroSimViz2D(Node):
         # Animation
         self.anim = FuncAnimation(self.fig, self.update_plot, interval=100, blit=False)
 
-        self.get_logger().info('2D Visualization started - Close window to exit')
+        self.get_logger().info('3D Visualization started - Close window to exit')
 
     def drone_odom_callback(self, msg):
         """Update drone position from odometry"""
@@ -94,9 +155,11 @@ class MicroSimViz2D(Node):
         # Add to trail (keep last 100 points)
         self.drone_trail_x.append(self.drone_pos[0])
         self.drone_trail_y.append(self.drone_pos[1])
+        self.drone_trail_z.append(self.drone_pos[2])
         if len(self.drone_trail_x) > 100:
             self.drone_trail_x.pop(0)
             self.drone_trail_y.pop(0)
+            self.drone_trail_z.pop(0)
 
     def rover_odom_callback(self, msg):
         """Update rover position from odometry"""
@@ -112,9 +175,11 @@ class MicroSimViz2D(Node):
         # Add to trail (keep last 100 points)
         self.rover_trail_x.append(self.rover_pos[0])
         self.rover_trail_y.append(self.rover_pos[1])
+        self.rover_trail_z.append(self.rover_pos[2])
         if len(self.rover_trail_x) > 100:
             self.rover_trail_x.pop(0)
             self.rover_trail_y.pop(0)
+            self.rover_trail_z.pop(0)
 
     def markers_callback(self, msg):
         """Update world features from markers"""
@@ -210,6 +275,87 @@ class MicroSimViz2D(Node):
             # Remove duplicates
             by_label = dict(zip(labels, handles))
             self.ax_map.legend(by_label.values(), by_label.keys(), loc='upper right')
+
+        # === 3D View Updates ===
+        self.update_3d_view()
+
+    def update_3d_view(self):
+        """Update the 3D perspective view"""
+        # Clear previous 3D artists
+        for artist in self.feature_3d_artists:
+            artist.remove()
+        self.feature_3d_artists = []
+
+        # Draw ground plane (simple grid)
+        if not hasattr(self, 'ground_plane_drawn'):
+            xx, yy = np.meshgrid([-VIEW_3D_X_LIMIT, VIEW_3D_X_LIMIT],
+                                 [-VIEW_3D_Y_LIMIT, VIEW_3D_Y_LIMIT])
+            zz = np.zeros_like(xx)
+            self.ax_3d.plot_surface(xx, yy, zz, alpha=0.1, color='gray')
+            self.ground_plane_drawn = True
+
+        # Draw world features as 3D cylinders
+        for feature in self.world_features:
+            # Create cylinder
+            radius = feature['radius']
+            height = 5.0 if feature['type'] == 'obstacle' else 0.5  # Obstacles taller
+            theta = np.linspace(0, 2*np.pi, 20)
+            z_cyl = np.linspace(0, height, 10)
+            theta_grid, z_grid = np.meshgrid(theta, z_cyl)
+            x_cyl = feature['x'] + radius * np.cos(theta_grid)
+            y_cyl = feature['y'] + radius * np.sin(theta_grid)
+
+            surf = self.ax_3d.plot_surface(x_cyl, y_cyl, z_grid,
+                                          color=feature['color'], alpha=0.6,
+                                          edgecolor='none')
+            self.feature_3d_artists.append(surf)
+
+        # Draw drone as 3D arrow (quiver)
+        if self.drone_3d_quiver:
+            self.drone_3d_quiver.remove()
+
+        arrow_length = 3.0
+        dx = arrow_length * np.cos(self.drone_yaw)
+        dy = arrow_length * np.sin(self.drone_yaw)
+        dz = 0  # Arrow points horizontally
+
+        self.drone_3d_quiver = self.ax_3d.quiver(
+            self.drone_pos[0], self.drone_pos[1], self.drone_pos[2],
+            dx, dy, dz,
+            color='red', arrow_length_ratio=0.3, linewidth=3, alpha=0.8
+        )
+
+        # Draw rover as 3D arrow
+        if self.rover_3d_quiver:
+            self.rover_3d_quiver.remove()
+
+        arrow_length = 2.0
+        dx = arrow_length * np.cos(self.rover_yaw)
+        dy = arrow_length * np.sin(self.rover_yaw)
+        dz = 0
+
+        self.rover_3d_quiver = self.ax_3d.quiver(
+            self.rover_pos[0], self.rover_pos[1], self.rover_pos[2],
+            dx, dy, dz,
+            color='blue', arrow_length_ratio=0.3, linewidth=2, alpha=0.8
+        )
+
+        # Draw 3D trails
+        if self.drone_trail_3d:
+            self.drone_trail_3d.remove()
+        if len(self.drone_trail_x) > 1:
+            self.drone_trail_3d = self.ax_3d.plot(
+                self.drone_trail_x, self.drone_trail_y, self.drone_trail_z,
+                'r-', alpha=0.4, linewidth=2
+            )[0]
+
+        if self.rover_trail_3d:
+            self.rover_trail_3d.remove()
+        if len(self.rover_trail_x) > 1:
+            self.rover_trail_3d = self.ax_3d.plot(
+                self.rover_trail_x, self.rover_trail_y, self.rover_trail_z,
+                'b-', alpha=0.4, linewidth=2
+            )[0]
 
 
 def main(args=None):

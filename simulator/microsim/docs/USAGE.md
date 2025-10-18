@@ -57,6 +57,7 @@ rviz2 -d config/microsim.rviz
 ```
 
 This will automatically load all the configured displays:
+
 - TF (coordinate frames)
 - Drone & Rover Odometry
 - World Features (obstacles, hazards, targets)
@@ -92,12 +93,14 @@ python3 scripts/viz_2d.py
 ```
 
 This shows:
+
 - **Left panel**: Top-down 2D map with drone (red arrow), rover (blue arrow), and world features
 - **Right panel**: Live camera feed from drone
 - Movement trails for both robots
 - Real-time position display
 
 **Advantages over RViz:**
+
 - No OpenGL issues (uses matplotlib)
 - More stable on macOS
 - Lower resource usage
@@ -118,11 +121,13 @@ If you still want to try RViz:
 ```
 
 **Common RViz crash causes on Mac:**
+
 - OpenGL 2.1 limitations (macOS doesn't support newer OpenGL)
 - Graphics driver issues
 - OGRE rendering engine incompatibility
 
 **Known issue:** Even with software rendering, RViz may still crash with:
+
 ```
 libc++abi: terminating due to uncaught exception of type std::__1::system_error: mutex lock failed
 ```
@@ -132,22 +137,27 @@ This is a fundamental incompatibility between RViz/OGRE and macOS. **Use the 2D 
 ### Configuring RViz Displays
 
 1. **Set Fixed Frame:**
+
    - Left panel → "Global Options" → "Fixed Frame" → Change to `world`
 
 2. **Add TF Display (Coordinate Frames):**
+
    - Click "Add" button (bottom left)
    - "By display type" tab → Select "TF" → Click "OK"
 
 3. **Add Camera Display (Drone Camera View):**
+
    - Click "Add" → "By topic" tab
    - Expand `/drone/camera/image_raw` → Select "Camera" → Click "OK"
 
 4. **Add Odometry Displays (Robot Paths):**
+
    - Click "Add" → "By topic"
    - Find `/drone/odom` → Select "Odometry" → Click "OK"
    - Repeat for `/rover/odom`
 
 5. **Adjust Trail Length (Optional):**
+
    - Expand "Odometry" display in left panel
    - Find "Keep" property → Set to `100` (prevents long trails)
 
@@ -162,36 +172,43 @@ This is a fundamental incompatibility between RViz/OGRE and macOS. **Use the 2D 
 ### Drone Commands
 
 **Move forward:**
+
 ```bash
 ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
 ```
 
 **Fly in circles:**
+
 ```bash
 ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {z: 0.5}}"
 ```
 
 **Hover and spin in place:**
+
 ```bash
-ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 1.0}}"
+ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 1.0}}" --once
 ```
 
 **Spiral upward:**
+
 ```bash
-ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.5}, angular: {z: 0.5}}"
+ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.5}, angular: {z: 0.5}}" --once
 ```
 
 **Strafe sideways:**
+
 ```bash
-ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 1.0, z: 0.0}, angular: {z: 0.0}}"
+ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 1.0, z: 0.0}, angular: {z: 0.0}}" --once
 ```
 
 **Climb vertically:**
+
 ```bash
-ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 1.0}, angular: {z: 0.0}}"
+ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 1.0}, angular: {z: 0.0}}" --once
 ```
 
 **Stop the drone:**
+
 ```bash
 ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}" --once
 ```
@@ -199,21 +216,25 @@ ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0,
 ### Rover Commands
 
 **Move forward:**
+
 ```bash
 ros2 topic pub /rover/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
 ```
 
 **Drive in circles:**
+
 ```bash
 ros2 topic pub /rover/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {z: 0.3}}"
 ```
 
 **Rotate in place:**
+
 ```bash
 ros2 topic pub /rover/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.5}}"
 ```
 
 **Stop the rover:**
+
 ```bash
 ros2 topic pub /rover/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {z: 0.0}}" --once
 ```
@@ -223,11 +244,13 @@ ros2 topic pub /rover/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0,
 The `Twist` message has 6 components:
 
 **Linear velocity (m/s):**
+
 - `x` - Forward/backward (drone and rover)
 - `y` - Left/right (drone only, rover ignores this)
 - `z` - Up/down (drone only)
 
 **Angular velocity (rad/s):**
+
 - `z` - Yaw rotation (turning left/right)
 
 **Note:** By default, commands publish continuously (~10 Hz). Use `--once` flag to send a single command.
@@ -245,6 +268,7 @@ ros2 service call /microsim/reset std_srvs/srv/Empty
 ```
 
 **Initial positions:**
+
 - Drone: x=0, y=0, z=1.0, yaw=0
 - Rover: x=-5, y=0, theta=0
 
@@ -275,11 +299,13 @@ ros2 topic pub /radio/rover_tx std_msgs/msg/String '{data: "Hello from rover"}' 
 ### Listen to Received Messages
 
 **Drone receives:**
+
 ```bash
 ros2 topic echo /radio/drone_rx
 ```
 
 **Rover receives:**
+
 ```bash
 ros2 topic echo /radio/rover_rx
 ```
@@ -333,29 +359,35 @@ ros2 topic echo /drone/camera/camera_info
 ## Available Topics
 
 ### Odometry (60 Hz)
+
 - `/drone/odom` - Drone position, orientation, velocities
 - `/rover/odom` - Rover position, orientation, velocities
 
 ### GPS (10 Hz)
+
 - `/drone/gps` - Drone GPS with noise (WGS-84)
 - `/rover/gps` - Rover GPS with noise (WGS-84)
 
 ### Sensors
+
 - `/rover/range` - Range sensor (20 Hz, ultrasound)
 - `/drone/camera/image_raw` - RGB camera (2 Hz, 128x128 px)
 - `/drone/camera/camera_info` - Camera intrinsics
 
 ### Radio Communication
+
 - `/radio/drone_tx` - Drone transmit
 - `/radio/drone_rx` - Drone receive
 - `/radio/rover_tx` - Rover transmit
 - `/radio/rover_rx` - Rover receive
 
 ### TF Frames
+
 - `/tf` - Transform tree (60 Hz)
 - Frames: `world`, `drone/base_link`, `rover/base_link`, `drone/camera_link`
 
 ### System
+
 - `/clock` - Simulation time
 
 ---
@@ -380,12 +412,14 @@ python3 -m pytest test/test_physics.py -v
 ### Integration Tests (Requires ROS 2)
 
 **In Docker:**
+
 ```bash
 cd /workspace
 ./docker-scripts/integration_test.sh
 ```
 
 **On Mac:**
+
 ```bash
 cd /Users/rcampos/prog/Robots/robotic-ai-agents/simulator/microsim
 ./run_integration_tests.sh
@@ -430,6 +464,7 @@ Changes to Python files are immediately reflected (no rebuild needed).
 ## Quick Start Workflow
 
 **Terminal 1 - Simulator:**
+
 ```bash
 conda activate ros2_humble
 cd /Users/rcampos/prog/Robots/robotic-ai-agents/simulator/microsim
@@ -438,6 +473,7 @@ ros2 run microsim microsim_node
 ```
 
 **Terminal 2 - RViz:**
+
 ```bash
 conda activate ros2_humble
 rviz2
@@ -445,6 +481,7 @@ rviz2
 ```
 
 **Terminal 3 - Control:**
+
 ```bash
 conda activate ros2_humble
 
@@ -478,6 +515,7 @@ alias reset_sim='ros2 service call /microsim/reset std_srvs/srv/Empty'
 ```
 
 Then reload your shell:
+
 ```bash
 source ~/.zshrc
 ```
@@ -489,6 +527,7 @@ source ~/.zshrc
 ### "Package 'microsim' not found"
 
 Make sure you've sourced the workspace:
+
 ```bash
 cd /Users/rcampos/prog/Robots/robotic-ai-agents/simulator/microsim
 source install/setup.bash
@@ -497,6 +536,7 @@ source install/setup.bash
 ### Robots don't stop when I cancel the command
 
 Send an explicit stop command:
+
 ```bash
 ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angular: {z: 0.0}}" --once
 ```
@@ -510,6 +550,7 @@ ros2 topic pub /drone/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angula
 ### Docker and Mac can't see each other's topics
 
 Stop Docker if running everything on Mac:
+
 ```bash
 docker-compose down
 ```
@@ -519,6 +560,7 @@ docker-compose down
 The simulator looks for `install/microsim/share/microsim/scenarios/default.yaml`.
 
 If missing, specify explicitly:
+
 ```bash
 ros2 run microsim microsim_node --ros-args -p scenario_file:=$(pwd)/scenarios/default.yaml
 ```
