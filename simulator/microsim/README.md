@@ -189,6 +189,8 @@ world
 
 - **[docs/QUICKSTART.md](docs/QUICKSTART.md)** - Get started in 3 steps
 - **[docs/USAGE.md](docs/USAGE.md)** - Complete command reference
+- **[docs/WORLD_CONFIGURATION.md](docs/WORLD_CONFIGURATION.md)** - Configure world, features, sensors
+- **[docs/AI_CONTROLLER_GUIDE.md](docs/AI_CONTROLLER_GUIDE.md)** - Build AI-based controllers
 - **[docs/TEST_SUITE.md](docs/TEST_SUITE.md)** - Test documentation
 - **[docs/DOCKER.md](docs/DOCKER.md)** - Docker setup guide
 
