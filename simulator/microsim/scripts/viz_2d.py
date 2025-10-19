@@ -137,7 +137,8 @@ class MicroSimViz2D(Node):
             Image, '/drone/camera/image_raw', self.camera_callback, 10)
 
         # Animation
-        self.anim = FuncAnimation(self.fig, self.update_plot, interval=100, blit=False)
+        # Update at 30 Hz (every ~33ms) for responsive visualization
+        self.anim = FuncAnimation(self.fig, self.update_plot, interval=33, blit=False)
 
         self.get_logger().info('3D Visualization started - Close window to exit')
 
