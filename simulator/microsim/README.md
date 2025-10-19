@@ -114,6 +114,29 @@ python3 scripts/drone_controller.py
 
 The controller publishes commands at 10 Hz and displays real-time velocity feedback.
 
+### Autonomous Controller (AI Development Template)
+
+For building AI-based autonomous controllers, use the reference implementation:
+
+```bash
+python3 scripts/autonomous_drone_controller.py
+```
+
+This provides a clean template showing:
+- ROS 2 sensor integration (odometry, GPS, camera)
+- Control loop structure (perceive → think → act)
+- Simple waypoint following as baseline
+- Clear hooks for AI integration (LLM, RL, vision models)
+
+**See [docs/AI_CONTROLLER_GUIDE.md](docs/AI_CONTROLLER_GUIDE.md) for detailed AI integration patterns.**
+
+The reference controller demonstrates:
+- **Perception:** Process sensor data (odometry, GPS, camera)
+- **Decision:** AI decision-making hook (replace `simple_decision_logic()`)
+- **Action:** Velocity command generation and publishing
+
+Perfect starting point for intelligent drone controllers using AI agents.
+
 ## Topics
 
 ### Drone
