@@ -33,6 +33,8 @@ docker-compose exec ros2 bash
 
 ### Option 2: Native ROS 2 (macOS/Linux)
 
+**Windows users:** See [docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md) for Windows-specific instructions.
+
 #### Prerequisites
 
 - ROS 2 Humble (via robostack on macOS, or native on Linux)
@@ -191,8 +193,9 @@ world
 - **[docs/USAGE.md](docs/USAGE.md)** - Complete command reference
 - **[docs/WORLD_CONFIGURATION.md](docs/WORLD_CONFIGURATION.md)** - Configure world, features, sensors
 - **[docs/AI_CONTROLLER_GUIDE.md](docs/AI_CONTROLLER_GUIDE.md)** - Build AI-based controllers
-- **[docs/TEST_SUITE.md](docs/TEST_SUITE.md)** - Test documentation
+- **[docs/WINDOWS_SETUP.md](docs/WINDOWS_SETUP.md)** - **Windows installation guide**
 - **[docs/DOCKER.md](docs/DOCKER.md)** - Docker setup guide
+- **[docs/TEST_SUITE.md](docs/TEST_SUITE.md)** - Test documentation
 
 ## Features
 

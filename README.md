@@ -19,14 +19,16 @@ cd simulator/microsim
 
 ### 2. Install Dependencies
 
-**Option A: Docker (Recommended)**
+**Windows Users:** See [docs/WINDOWS_SETUP.md](simulator/microsim/docs/WINDOWS_SETUP.md) for complete Windows setup guide (WSL2 + Docker recommended).
+
+**Option A: Docker (Recommended - Linux/macOS/Windows)**
 ```bash
 # See simulator/microsim/docs/DOCKER.md for complete setup
 docker-compose up -d
 docker-compose exec ros2 bash
 ```
 
-**Option B: Native (macOS/Linux)**
+**Option B: Native (macOS/Linux only)**
 ```bash
 # Install ROS 2 Humble via robostack
 conda create -n ros2_humble
@@ -115,8 +117,9 @@ robotic-ai-agents/
 | [**docs/USAGE.md**](simulator/microsim/docs/USAGE.md) | Complete command reference |
 | [**docs/WORLD_CONFIGURATION.md**](simulator/microsim/docs/WORLD_CONFIGURATION.md) | Configure worlds, sensors, features |
 | [**docs/AI_CONTROLLER_GUIDE.md**](simulator/microsim/docs/AI_CONTROLLER_GUIDE.md) | Build intelligent controllers |
-| [**docs/TEST_SUITE.md**](simulator/microsim/docs/TEST_SUITE.md) | Testing and validation |
+| [**docs/WINDOWS_SETUP.md**](simulator/microsim/docs/WINDOWS_SETUP.md) | **Windows installation guide** |
 | [**docs/DOCKER.md**](simulator/microsim/docs/DOCKER.md) | Docker setup guide |
+| [**docs/TEST_SUITE.md**](simulator/microsim/docs/TEST_SUITE.md) | Testing and validation |
 
 ## Development
 
