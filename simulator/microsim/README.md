@@ -81,13 +81,38 @@ ros2 run microsim microsim_node
 conda activate ros2_humble
 python3 scripts/viz_2d.py
 
-# Terminal 3: Send velocity commands
+# Terminal 3: Control the drone interactively
 conda activate ros2_humble
+python3 scripts/drone_controller.py
+
+# Or send manual velocity commands
 ros2 topic pub /drone/cmd_vel geometry_msgs/Twist \
   "{linear: {x: 2.0, y: 0.0, z: 0.0}, angular: {z: 0.5}}" --rate 10
 ```
 
 **Note:** RViz2 has stability issues on macOS. Use the included `scripts/viz_2d.py` for visualization instead.
+
+### Interactive Drone Controller
+
+The `drone_controller.py` script provides keyboard-based control for testing:
+
+```bash
+python3 scripts/drone_controller.py
+```
+
+**Controls:**
+- **W/S** - Forward/Backward
+- **A/D** - Left/Right (strafe)
+- **Q/E** - Rotate Left/Right
+- **R/F** - Up/Down (altitude)
+- **+/-** - Increase/Decrease speed multiplier
+- **SPACE** - Stop all movement
+- **H** - Hover (stop horizontal, maintain altitude)
+- **L** - Land (descend slowly)
+- **0** - Reset simulation
+- **ESC** - Exit controller
+
+The controller publishes commands at 10 Hz and displays real-time velocity feedback.
 
 ## Topics
 
