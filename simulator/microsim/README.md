@@ -143,7 +143,7 @@ Perfect starting point for intelligent drone controllers using AI agents.
 - `/drone/cmd_vel` (geometry_msgs/Twist) - Velocity commands
 - `/drone/odom` (nav_msgs/Odometry) - Ground truth odometry
 - `/drone/gps` (sensor_msgs/NavSatFix) - Noisy GPS position
-- `/drone/camera/image_raw` (sensor_msgs/Image) - RGB camera (128x128, rgb8)
+- `/drone/camera/image_raw` (sensor_msgs/Image) - RGB camera (256x256, rgb8)
 - `/drone/camera/camera_info` (sensor_msgs/CameraInfo) - Camera intrinsics
 
 ### Rover
@@ -198,7 +198,7 @@ world
 
 ✓ **Deterministic simulation** - Fixed timestep (60 Hz), seeded RNGs
 ✓ **Dual robots** - 6-DOF drone + differential-drive rover
-✓ **Rich sensors** - GPS (noisy), downward camera (128×128 RGB), range sensor
+✓ **Rich sensors** - GPS (noisy), downward camera (256×256 RGB), range sensor
 ✓ **Radio link** - Inter-robot communication with latency/jitter/packet loss
 ✓ **World features** - Obstacles, hazards, targets with semantic labeling
 ✓ **Live editing** - Modify scenario YAML without reinstalling
