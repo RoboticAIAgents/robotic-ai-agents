@@ -6,11 +6,12 @@ Complete guide for installing and running MicroSim on Windows 10/11.
 
 **TL;DR: Use WSL2 (Windows Subsystem for Linux) with Docker. This is the most reliable and performant option.**
 
-Windows has three options for running ROS 2:
+Windows has four options for running ROS 2:
 
 | Option | Pros | Cons | Recommendation |
 |--------|------|------|----------------|
 | **WSL2 + Docker** | Easy, reliable, best performance | Requires WSL2 setup | ✅ **RECOMMENDED** |
+| **Robostack (Conda)** | Native Windows, conda-based like macOS | Requires VS2022, slower than WSL2 | ⚠️ Alternative if WSL2 unavailable |
 | **Native Windows ROS 2** | Native performance | Complex setup, limited packages | ⚠️ Advanced users only |
 | **Docker Desktop** | Simple setup | Slower, display issues | ⚠️ Fallback option |
 
@@ -180,9 +181,229 @@ python3 scripts/drone_controller.py
 
 ---
 
-## Option 2: Native Windows ROS 2 (Advanced)
+## Option 2: Robostack (Conda) - Native Windows Alternative
 
-**⚠️ Warning:** This is more complex and some ROS 2 packages may not be available on Windows.
+**Similar to the macOS setup, Windows users can also use Robostack with conda for a package-manager-based approach.** This is useful if WSL2 is not available or if you prefer native Windows installation.
+
+### How Robostack Works on Windows
+
+Like on macOS, Robostack provides pre-built ROS 2 binaries through the conda package manager:
+
+- **Package Manager:** Conda/Miniforge provides dependency management
+- **Pre-built Binaries:** Robostack channel (`robostack-staging`) hosts compiled ROS 2 packages
+- **Installation:** Everything installs into your conda environment directory
+- **No separate ROS 2 installer needed:** Unlike native Windows binary installation
+
+### Prerequisites
+
+- Windows 10 version 1909+ or Windows 11
+- **Visual Studio 2022 with C++ Build Tools** (this is the key requirement for Windows)
+  - Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+  - During installation: Select "Desktop development with C++"
+  - You need this for building ROS 2 packages from source
+- Administrator access
+- At least 15GB free disk space
+
+### Step 1: Install Visual Studio 2022 Build Tools
+
+1. Download Visual Studio Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+2. Run the installer
+3. Select **"Desktop development with C++"** workload
+4. Complete installation (this is required for conda ROS 2 packages)
+
+### Step 2: Install Miniforge (Conda)
+
+**Open PowerShell and run:**
+
+```powershell
+# Download Miniforge installer
+curl -L -o miniforge.exe https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe
+
+# Run installer
+.\miniforge.exe
+
+# Choose installation path (default is usually fine)
+# Check "Add Miniforge to PATH"
+```
+
+**Verify installation:**
+```powershell
+conda --version
+```
+
+### Step 3: Create ROS 2 Conda Environment
+
+```powershell
+# Create new environment with ROS 2 Humble
+conda create -n ros2_humble -c robostack-staging ros-humble-desktop python=3.11 -y
+
+# This installs:
+# - ROS 2 Humble (core)
+# - Pre-built binary packages
+# - Python 3.11
+# - All dependencies via conda
+```
+
+### Step 4: Install Development Tools
+
+```powershell
+# Activate environment
+conda activate ros2_humble
+
+# Install colcon and additional tools
+conda install -c robostack-staging colcon-common-extensions -y
+
+# Install Python dependencies for our simulator
+conda install -c conda-forge matplotlib numpy pyyaml opencv-python -y
+```
+
+### Step 5: Clone and Build MicroSim
+
+```powershell
+# Create workspace
+mkdir robotic-ai-agents
+cd robotic-ai-agents
+
+# Clone repository (or copy your code)
+git clone <your-repo-url> .
+
+# Activate environment
+conda activate ros2_humble
+
+# Source ROS 2 setup
+# On Windows, use the batch file instead of bash
+call %CONDA_PREFIX%\etc\conda\activate.d\setup_ros2.bat
+
+# Navigate to simulator
+cd simulator\microsim
+
+# Build with colcon
+colcon build --packages-select microsim
+call install\setup.bat
+```
+
+### Step 6: Run Simulator
+
+```powershell
+# Terminal 1: Simulator node
+conda activate ros2_humble
+cd robotic-ai-agents\simulator\microsim
+call install\setup.bat
+ros2 run microsim microsim_node
+
+# Terminal 2: Visualization
+conda activate ros2_humble
+cd robotic-ai-agents\simulator\microsim
+python scripts\viz_2d.py
+
+# Terminal 3: Controller (if using autonomous controller)
+conda activate ros2_humble
+cd robotic-ai-agents\simulator\microsim
+python scripts\autonomous_drone_controller.py
+```
+
+### Windows-Specific Considerations
+
+#### 1. Path Separators
+Windows uses backslashes (`\`) instead of forward slashes (`/`). Our Python code should handle this automatically, but be aware when writing paths manually.
+
+#### 2. Interactive Controller Issues
+The `drone_controller.py` uses Unix-only `termios` library. Options:
+
+**Option A:** Modify for Windows using `msvcrt`:
+```python
+# Add to drone_controller.py
+import sys
+if sys.platform == 'win32':
+    import msvcrt
+    def get_key():
+        if msvcrt.kbhit():
+            return msvcrt.getch().decode()
+        return None
+else:
+    import termios, tty
+    def get_key():
+        # Unix version...
+```
+
+**Option B:** Use WSL2 for interactive controller (WSL has full Unix compatibility)
+
+#### 3. Terminal Emulator
+- Recommended: **Windows Terminal** (modern, handles conda well)
+- Alternative: PowerShell or Command Prompt
+- Avoid: Basic cmd.exe (poor conda integration)
+
+### Troubleshooting Robostack on Windows
+
+#### Issue: "Visual C++ Build Tools not found"
+```
+CMake error: MSVC not found
+```
+
+**Solution:** Install Visual Studio 2022 Build Tools with C++ support (see Step 1)
+
+#### Issue: "No module named 'rclpy'"
+```
+ModuleNotFoundError: No module named 'rclpy'
+```
+
+**Solution:** Make sure to activate conda environment and source ROS 2:
+```powershell
+conda activate ros2_humble
+call %CONDA_PREFIX%\etc\conda\activate.d\setup_ros2.bat
+```
+
+#### Issue: "colcon not found"
+```
+'colcon' is not recognized as an internal or external command
+```
+
+**Solution:** Install colcon in the environment:
+```powershell
+conda activate ros2_humble
+conda install -c robostack-staging colcon-common-extensions -y
+```
+
+#### Issue: Long file paths causing issues
+
+Windows has a 260-character path limit in older versions. Solutions:
+
+```powershell
+# Option 1: Enable long path support (Windows 10+ v1607)
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+
+# Option 2: Keep paths short
+# Clone to: C:\ws instead of C:\Users\YourName\Documents\Projects\...
+```
+
+### Comparison: Robostack vs WSL2
+
+| Aspect | Robostack (Conda) | WSL2 + Docker |
+|--------|-------------------|---------------|
+| **Setup Time** | 20 minutes | 30 minutes |
+| **Setup Complexity** | Medium (VS2022 required) | Medium (WSL2 setup) |
+| **Native Windows** | Yes ✓ | No (Linux VM) |
+| **Performance** | 85-90% | 95%+ |
+| **File Access** | Direct Windows paths | WSL2 filesystem faster |
+| **Compatibility** | Good (all core packages) | Excellent (full Linux) |
+| **Interactive Controller** | Needs modification | Works (Unix-native) |
+| **Docker Support** | No | Yes (built-in) |
+| **When to Use** | WSL2 unavailable, prefer Windows | Best overall option |
+
+### When to Choose Robostack on Windows
+
+- ✅ WSL2 is not available (older Windows, hardware limitations)
+- ✅ You prefer native Windows development
+- ✅ You're familiar with conda from macOS
+- ✅ You want to understand how ROS 2 environment works
+- ❌ You need interactive controller support (without modification)
+- ❌ WSL2 is available and stable on your machine
+
+---
+
+## Option 3: Native Windows ROS 2 (Advanced)
+
+**⚠️ Warning:** This is more complex and some ROS 2 packages may not be available on Windows. This is different from Robostack—it's the official ROS 2 Windows binary installation.
 
 ### Prerequisites
 
@@ -272,7 +493,7 @@ python scripts\viz_2d.py
 
 ---
 
-## Option 3: Docker Desktop Only (Fallback)
+## Option 4: Docker Desktop Only (Fallback)
 
 If WSL2 doesn't work for some reason, you can use Docker Desktop alone.
 
@@ -301,7 +522,7 @@ Without WSL2, X11 forwarding is more complicated. Options:
 
 ## Recommended Setup Summary
 
-For the best Windows experience:
+### Setup Option A: WSL2 + Docker (Best Overall)
 
 ```
 Windows 10/11
@@ -318,6 +539,26 @@ VcXsrv (for visualization)
 **Setup time:** ~30 minutes
 **Complexity:** Medium
 **Reliability:** High ✅
+**Recommendation:** Use this unless WSL2 is unavailable
+
+### Setup Option B: Robostack Conda (Native Windows Alternative)
+
+```
+Windows 10/11
+    ↓
+Visual Studio 2022 Build Tools
+    ↓
+Miniforge (Conda)
+    ↓
+Robostack ROS 2 Environment
+    ↓
+MicroSim via colcon build
+```
+
+**Setup time:** ~20 minutes
+**Complexity:** Medium (VS2022 required)
+**Reliability:** High ✅
+**Recommendation:** Use if WSL2 unavailable or prefer native Windows
 
 ---
 
@@ -467,12 +708,27 @@ If you encounter issues not covered here:
 ## Summary
 
 **For Windows developers:**
-- ✅ Use WSL2 + Docker (recommended)
+
+### Recommended Path
+- ✅ **WSL2 + Docker** (best for most use cases)
 - ✅ VcXsrv for visualization
 - ✅ VSCode with Remote-WSL for best experience
-- ⚠️ Avoid native Windows ROS 2 unless necessary
-- ⚠️ Keep files in WSL2 filesystem for performance
+- ✅ Keep files in WSL2 filesystem for performance
 
-**Expected setup time:** 30-60 minutes for first-time setup
+### Alternative Path (Native Windows)
+- ✅ **Robostack (Conda)** (if WSL2 unavailable or prefer native Windows)
+- ✅ Install Visual Studio 2022 Build Tools first
+- ✅ Modify interactive controller for Windows compatibility (msvcrt)
+- ✅ Uses same conda approach as macOS Robostack
+
+### Avoid
+- ⚠️ Native Windows ROS 2 binary installation (complex, limited packages)
+- ⚠️ Docker Desktop without WSL2 (slower, display issues)
+
+**Expected setup time:**
+- WSL2 + Docker: 30-60 minutes
+- Robostack (Conda): 20-40 minutes
+
+**Key Insight:** Windows has two viable conda-based approaches that avoid traditional binary installers—just like macOS!
 
 Good luck! 🚀
